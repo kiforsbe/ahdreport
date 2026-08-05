@@ -6,7 +6,7 @@ const typeMap: Record<string, Metric> = {
   HKQuantityTypeIdentifierBodyMass: 'weight', HKQuantityTypeIdentifierHeartRate: 'heartRate', HKQuantityTypeIdentifierRestingHeartRate: 'restingHeartRate',
   HKQuantityTypeIdentifierBloodPressureSystolic: 'bloodPressureSystolic', HKQuantityTypeIdentifierBloodPressureDiastolic: 'bloodPressureDiastolic',
   HKQuantityTypeIdentifierBodyTemperature: 'bodyTemperature', HKQuantityTypeIdentifierStepCount: 'steps', HKQuantityTypeIdentifierActiveEnergyBurned: 'activeEnergy',
-  HKQuantityTypeIdentifierAppleExerciseTime: 'exerciseTime', HKQuantityTypeIdentifierDistanceWalkingRunning: 'distance', HKQuantityTypeIdentifierFlightsClimbed: 'flights',
+  HKQuantityTypeIdentifierAppleExerciseTime: 'exerciseTime', HKQuantityTypeIdentifierDistanceWalkingRunning: 'distance',
   HKCategoryTypeIdentifierSleepAnalysis: 'sleep', HKQuantityTypeIdentifierWalkingSpeed: 'walkingSpeed', HKQuantityTypeIdentifierWalkingStepLength: 'stepLength',
   HKQuantityTypeIdentifierWalkingAsymmetryPercentage: 'walkingAsymmetry', HKQuantityTypeIdentifierWalkingDoubleSupportPercentage: 'doubleSupport',
   HKQuantityTypeIdentifierStairAscentSpeed: 'stairAscentSpeed', HKQuantityTypeIdentifierStairDescentSpeed: 'stairDescentSpeed', HKQuantityTypeIdentifierSixMinuteWalkTestDistance: 'sixMinuteWalk',

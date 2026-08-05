@@ -1,0 +1,16 @@
+table {
+  table-layout: fixed;
+}
+
+th:first-child,
+td:first-child {
+  width: 132px;
+  min-width: 132px;
+  padding-right: 22px;
+  white-space: nowrap;
+}
+
+th:not(:first-child),
+td:not(:first-child) {
+  width: auto;
+}
