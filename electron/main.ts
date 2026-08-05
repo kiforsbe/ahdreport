@@ -22,7 +22,13 @@ ipcMain.handle('health:exportPdf', async () => {
   if (!mainWindow) return { canceled: true };
   const target = await dialog.showSaveDialog(mainWindow, { title: 'Save health report', defaultPath: 'apple-health-report.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
   if (target.canceled || !target.filePath) return { canceled: true };
-  const pdf = await mainWindow.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { marginType: 'default' } });
-  await (await import('node:fs/promises')).writeFile(target.filePath, pdf);
-  return { canceled: false, path: target.filePath };
+  const originalBackground = mainWindow.getBackgroundColor();
+  mainWindow.setBackgroundColor('#ffffff');
+  try {
+    const pdf = await mainWindow.webContents.printToPDF({ printBackground: false, pageSize: 'A4', margins: { marginType: 'default' } });
+    await (await import('node:fs/promises')).writeFile(target.filePath, pdf);
+    return { canceled: false, path: target.filePath };
+  } finally {
+    mainWindow.setBackgroundColor(originalBackground);
+  }
 });

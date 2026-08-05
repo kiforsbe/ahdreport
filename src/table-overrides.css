@@ -1,12 +1,12 @@
 table {
   table-layout: fixed;
+  width: 100%;
 }
 
 th:first-child,
 td:first-child {
-  width: 132px;
-  min-width: 132px;
-  padding-right: 22px;
+  width: 92px;
+  min-width: 92px;
   white-space: nowrap;
 }
 
@@ -15,10 +15,12 @@ td:not(:first-child) {
   width: auto;
 }
 
-/* Only tables whose data cells are plain numeric text (no chart/SVG content) get right-aligned values. */
-table.numeric th:not(:first-child),
-table.numeric td:not(:first-child) {
-  text-align: right;
+@media print {
+  th:first-child,
+  td:first-child {
+    width: 68px;
+    min-width: 68px;
+  }
 }
 
 .table-notes {

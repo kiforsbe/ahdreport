@@ -190,8 +190,8 @@ flowchart TB
     Dashboard --> MetricChart["MetricChart\n(AreaChart, per metric)"]
     Dashboard --> BpChart["BloodPressureChart\n(ComposedChart: floating range bars\n+ avg tick, systolic & diastolic)"]
 
-    PrintReport --> VitalsTable["VitalsReportTable\n(BP + heart rate, per day)"]
-    PrintReport --> ActivityTable["ActivityReportTable\n(steps/distance/energy totals,\nweight average)"]
+    PrintReport --> VitalsTable["VitalsReportTable\n(BP + heart rate + weight, per day)"]
+    PrintReport --> ActivityTable["ActivityReportTable\n(steps/distance/energy/sleep totals)"]
     PrintReport --> WalkingTable["WalkingReportTable\n(gait metrics, compact distributions)"]
     PrintReport --> ReportTable["ReportTable\n(all remaining metrics)"]
 
