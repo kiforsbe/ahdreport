@@ -1,4 +1,12 @@
-import { useId, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Area,
   AreaChart,
@@ -23,9 +31,11 @@ import {
   labels,
   latest,
   metricGroups,
+  change,
+  median,
 } from "./report";
 
-const highlights: Metric[] = ["weight", "restingHeartRate", "steps", "sleep"];
+const highlights: Metric[] = ["weight", "heartRate", "steps", "sleep"];
 const bpMetrics: Metric[] = ["bloodPressureSystolic", "bloodPressureDiastolic"];
 const walkingMetrics: Metric[] = [
   "walkingSpeed",
@@ -40,6 +50,19 @@ const activityMetrics: Metric[] = [
   "sleep",
 ];
 const MAX_TABLE_ROWS = 365;
+const PrintLayoutContext = createContext(false);
+type PatientProfile = {
+  name: string;
+  personnummer: string;
+  dateOfBirth: string;
+  sex: string;
+};
+const patientDefaults: PatientProfile = {
+  name: import.meta.env.VITE_DEFAULT_PATIENT_NAME?.trim() ?? "",
+  personnummer: import.meta.env.VITE_DEFAULT_PERSONNUMMER?.trim() ?? "",
+  dateOfBirth: import.meta.env.VITE_DEFAULT_DATE_OF_BIRTH?.trim() ?? "",
+  sex: import.meta.env.VITE_DEFAULT_SEX?.trim() ?? "",
+};
 function rangeDate(days: number, end: string) {
   const d = end ? new Date(`${end}T12:00:00`) : new Date();
   d.setDate(d.getDate() - (days - 1));
@@ -47,6 +70,101 @@ function rangeDate(days: number, end: string) {
 }
 function formatDate(isoDay: string) {
   return new Date(`${isoDay}T00:00:00`).toLocaleDateString();
+}
+function formatPatientDate(value?: string) {
+  if (!value || !/^\d{8}$/.test(value)) return value;
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+}
+function PatientDetailsForm({
+  initial,
+  onFieldChange,
+}: {
+  initial: PatientProfile;
+  onFieldChange: (field: keyof PatientProfile, value: string) => void;
+}) {
+  const [fields, setFields] = useState(initial);
+  const update = (field: keyof PatientProfile, value: string) => {
+    setFields((current) => ({ ...current, [field]: value }));
+    onFieldChange(field, value);
+  };
+  return (
+    <>
+      <div className="patient-fields">
+      <label>
+        <span>Name</span>
+        <input
+          type="text"
+          value={fields.name}
+          onChange={(e) => update("name", e.target.value)}
+        />
+      </label>
+      <label>
+        <span>Personnummer</span>
+        <input
+          type="text"
+          value={fields.personnummer}
+          onChange={(e) => update("personnummer", e.target.value)}
+        />
+      </label>
+      <label>
+        <span>Date of birth</span>
+        <input
+          type="date"
+          value={fields.dateOfBirth}
+          onChange={(e) => update("dateOfBirth", e.target.value)}
+        />
+      </label>
+      <label>
+        <span>Sex</span>
+        <input
+          type="text"
+          value={fields.sex}
+          onChange={(e) => update("sex", e.target.value)}
+        />
+      </label>
+      </div>
+      <dl className="patient-export-details">
+      {[
+        ["Name", fields.name],
+        ["Personnummer", fields.personnummer],
+        ["Date of birth", fields.dateOfBirth],
+        ["Sex", fields.sex],
+      ].map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value || "—"}</dd>
+        </div>
+      ))}
+      </dl>
+    </>
+  );
+}
+function DebouncedDateInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  useEffect(() => {
+    if (draft === value) return;
+    const timer = window.setTimeout(() => onChange(draft), 300);
+    return () => window.clearTimeout(timer);
+  }, [draft, onChange, value]);
+  return (
+    <label>
+      {label}
+      <input
+        type="date"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+    </label>
+  );
 }
 function unitLabel(unit: string) {
   return unit ? ` (${unit})` : "";
@@ -112,6 +230,66 @@ function columnBounds(
 function totalBounds(totals: (number | undefined)[]) {
   return boundsOf(totals.filter((v): v is number => v !== undefined));
 }
+function OverviewCards({
+  records,
+  periodLabel,
+  collapsible = false,
+}: {
+  records: HealthData["records"];
+  periodLabel: string;
+  collapsible?: boolean;
+}) {
+  const cards = (
+    <div className="cards">
+        {highlights.map((metric) => {
+          const item = latest(records, metric);
+          const values = records
+            .filter((record) => record.metric === metric)
+            .map((record) => record.value);
+          const value =
+            metric === "weight" ? item?.value : median(records, metric);
+          const delta = metric === "weight" ? change(records, metric) : undefined;
+          const range = values.length
+            ? metric === "heartRate"
+              ? boundsOf(values)
+              : { min: Math.min(...values), max: Math.max(...values) }
+            : undefined;
+          return (
+            <article className="card" key={metric}>
+              <span>{labels[metric]}</span>
+              <strong>
+                {value === undefined || !item ? "—" : format(value, item.unit)}
+              </strong>
+              <small>
+                {value === undefined || !item
+                  ? "No records"
+                  : metric === "weight"
+                    ? delta === undefined
+                      ? `Latest: ${new Date(item.date).toLocaleDateString()}`
+                      : `Δ ${delta >= 0 ? "+" : "−"}${format(Math.abs(delta), item.unit)}`
+                    : metric === "heartRate"
+                      ? `Median · Sustained min ${format(range!.min, "", decimalsByMetric[metric])} · max ${format(range!.max, "", decimalsByMetric[metric])}`
+                      : `Median · Min ${format(range!.min, "", decimalsByMetric[metric])} · Max ${format(range!.max, "", decimalsByMetric[metric])}`}
+              </small>
+            </article>
+          );
+        })}
+    </div>
+  );
+  if (collapsible)
+    return (
+      <details className="overview-card-section">
+        <summary className="cards-period">{periodLabel}</summary>
+        {cards}
+      </details>
+    );
+  return (
+    <section className="overview-card-section">
+      <p className="cards-period">{periodLabel}</p>
+      {cards}
+    </section>
+  );
+}
 function MetricChart({
   metric,
   records,
@@ -119,6 +297,7 @@ function MetricChart({
   metric: Metric;
   records: HealthData["records"];
 }) {
+  const printLayout = useContext(PrintLayoutContext);
   const rows = daily(records, metric);
   if (!rows.length)
     return (
@@ -127,7 +306,11 @@ function MetricChart({
       </div>
     );
   return (
-    <ResponsiveContainer width="100%" height={210}>
+    <ResponsiveContainer
+      key={`${metric}-${printLayout ? "print" : "screen"}`}
+      width="100%"
+      height={210}
+    >
       <AreaChart data={rows}>
         <defs>
           <linearGradient id={`fill-${metric}`} x1="0" x2="0" y1="0" y2="1">
@@ -145,6 +328,7 @@ function MetricChart({
           stroke="#4263eb"
           strokeWidth={2.5}
           fill={`url(#fill-${metric})`}
+          isAnimationActive={!printLayout}
         />
       </AreaChart>
     </ResponsiveContainer>
@@ -163,6 +347,8 @@ function bpRangeBarShape(
       average = payload[avgKey];
     if (low === undefined) return <g />;
     const barHeight = Math.max(height, 3);
+    const barWidth = Math.max(width, 4);
+    const xAdj = x - (barWidth - width) / 2;
     const yAdj = y - (barHeight - height) / 2;
     const avgY =
       high > low
@@ -171,17 +357,17 @@ function bpRangeBarShape(
     return (
       <g>
         <rect
-          x={x}
+          x={xAdj}
           y={yAdj}
-          width={width}
+          width={barWidth}
           height={barHeight}
           rx={Math.min(4, width / 2)}
           fill={color}
           fillOpacity={0.55}
         />
         <line
-          x1={x}
-          x2={x + width}
+          x1={xAdj}
+          x2={xAdj + barWidth}
           y1={avgY}
           y2={avgY}
           stroke={color}
@@ -213,10 +399,10 @@ function BpTooltip({ active, payload, label }: any) {
     >
       <b>{new Date(`${label}T00:00:00`).toLocaleDateString()}</b>
       <div style={{ color: "#e8590c", marginTop: 4 }}>
-        Upper: {range(row.sLow, row.sHigh, row.sAvg)}
+        Systolic: {range(row.sLow, row.sHigh, row.sAvg)}
       </div>
       <div style={{ color: "#4263eb" }}>
-        Lower: {range(row.dLow, row.dHigh, row.dAvg)}
+        Diastolic: {range(row.dLow, row.dHigh, row.dAvg)}
       </div>
     </div>
   );
@@ -230,6 +416,7 @@ function BloodPressureChart({
   from: string;
   to: string;
 }) {
+  const printLayout = useContext(PrintLayoutContext);
   const sNote = coverageNote("bloodPressureSystolic", records, from, to);
   const dNote = coverageNote("bloodPressureDiastolic", records, from, to);
   const byDate = new Map<
@@ -284,8 +471,8 @@ function BloodPressureChart({
       >
         <h3>Blood pressure</h3>
         <small>
-          <b>{format(avg("sAvg"), "mmHg")}</b> upper avg. ·{" "}
-          <b>{format(avg("dAvg"), "mmHg")}</b> lower avg.
+          <b>{format(avg("sAvg"), "mmHg")}</b> systolic avg. ·{" "}
+          <b>{format(avg("dAvg"), "mmHg")}</b> diastolic avg.
         </small>
       </div>
       {(sNote || dNote) && (
@@ -294,7 +481,11 @@ function BloodPressureChart({
           {dNote && <small>Diastolic — {dNote}</small>}
         </div>
       )}
-      <ResponsiveContainer width="100%" height={210}>
+      <ResponsiveContainer
+        key={printLayout ? "blood-pressure-print" : "blood-pressure-screen"}
+        width="100%"
+        height={210}
+      >
         <ComposedChart data={rows} barGap={2} barCategoryGap="28%">
           <CartesianGrid vertical={false} stroke="#e7eaf0" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
@@ -327,10 +518,10 @@ function BloodPressureChart({
         </ComposedChart>
       </ResponsiveContainer>
       <small style={{ color: "#e8590c" }}>
-        ▮ Upper / systolic (range, avg tick)
+        ▮ Systolic (range, avg tick)
       </small>
       <small style={{ color: "#4263eb", marginLeft: 14 }}>
-        ▮ Lower / diastolic (range, avg tick)
+        ▮ Diastolic (range, avg tick)
       </small>
     </article>
   );
@@ -587,6 +778,8 @@ function DailyTotalBar({
   const clipId = useId();
   const max = columnMax || 1;
   const x = (v: number) => 8 + (Math.max(0, Math.min(v, max)) / max) * 144;
+  const labelX = 146;
+  const labelFill = x(value) >= labelX - 4 ? "#ffffff" : "#17213a";
   const inRange = (gx: number) => gx > 9 && gx < 151;
   const step = niceStep(max, gridTickCount);
   const majorTicks = ticksAtStep(0, max, step);
@@ -656,7 +849,7 @@ function DailyTotalBar({
         fill={color}
         clipPath={`url(#${clipId})`}
       />
-      <text x="158" y="17" fontSize="9" textAnchor="start" fill="#17213a">
+      <text x={labelX} y="17" fontSize="9" textAnchor="end" fill={labelFill}>
         {format(value, "", decimals)}
       </text>
     </svg>
@@ -1018,15 +1211,37 @@ function ActivityReportTable({
 }
 export function App() {
   const [data, setData] = useState<HealthData | null>(null);
+  const [printLayout, setPrintLayout] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const [patientName, setPatientName] = useState("");
-  const [personnummer, setPersonnummer] = useState("");
+  const patientProfile = useRef<PatientProfile>(patientDefaults);
   const [notice, setNotice] = useState("");
   const records = useMemo(
     () => (data ? filtered(data.records, from, to) : []),
     [data, from, to],
   );
+  const overviewRecords = useMemo(
+    () => (data ? filtered(data.records, rangeDate(30, to), to) : []),
+    [data, to],
+  );
+  const yearOverviewRecords = useMemo(
+    () => (data ? filtered(data.records, rangeDate(365, to), to) : []),
+    [data, to],
+  );
+  const allTimeOverviewRecords = useMemo(
+    () => (data ? filtered(data.records, "", to) : []),
+    [data, to],
+  );
+  useEffect(() => {
+    const prepare = () => setPrintLayout(true);
+    const restore = () => setPrintLayout(false);
+    window.addEventListener("health-atlas:prepare-print", prepare);
+    window.addEventListener("health-atlas:restore-layout", restore);
+    return () => {
+      window.removeEventListener("health-atlas:prepare-print", prepare);
+      window.removeEventListener("health-atlas:restore-layout", restore);
+    };
+  }, []);
   async function importData() {
     try {
       if (!window.healthAPI)
@@ -1038,6 +1253,16 @@ export function App() {
         setData(result);
         setFrom(result.diagnostics.earliest?.slice(0, 10) ?? "");
         setTo(result.diagnostics.latest?.slice(0, 10) ?? "");
+        patientProfile.current = {
+          name: patientDefaults.name || result.patient?.name || "",
+          personnummer:
+            patientDefaults.personnummer || result.patient?.identifier || "",
+          dateOfBirth:
+            patientDefaults.dateOfBirth ||
+            formatPatientDate(result.patient?.dateOfBirth) ||
+            "",
+          sex: patientDefaults.sex || result.patient?.sex || "",
+        };
         setNotice("");
       }
     } catch (error) {
@@ -1047,13 +1272,19 @@ export function App() {
     }
   }
   async function pdf() {
-    const result = await window.healthAPI.exportPdf(patientName, personnummer);
+    const patient = patientProfile.current;
+    const result = await window.healthAPI.exportPdf(
+      patient.name,
+      patient.personnummer,
+      patient.dateOfBirth,
+      patient.sex,
+    );
     if (!result.canceled) setNotice(`PDF saved to ${result.path}`);
   }
   if (!data)
     return (
       <main className="landing">
-        <div className="brand">HEALTH ATLAS</div>
+        <div className="brand">ADHREPORT</div>
         <div className="hero">
           <p className="eyebrow">PRIVATE HEALTH REPORTING</p>
           <h1>
@@ -1080,11 +1311,11 @@ export function App() {
   const medicationPresent = records.some((r) => r.metric === "medication");
   const hasBloodPressure = records.some((r) => bpMetrics.includes(r.metric));
   return (
-    <main>
+    <PrintLayoutContext.Provider value={printLayout}>
+      <main className={printLayout ? "print-layout" : undefined}>
       <header>
         <div>
-          <div className="brand">HEALTH ATLAS</div>
-          <span>Local session · {data.diagnostics.fileName}</span>
+          <div className="brand">ADHREPORT</div>
         </div>
         <div className="header-actions">
           <button onClick={() => setData(null)}>Clear session</button>
@@ -1118,69 +1349,34 @@ export function App() {
             </button>
           </div>
         </div>
-        <label>
-          From
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </label>
-        <label>
-          Patient name
-          <input
-            type="text"
-            placeholder="For the PDF header"
-            value={patientName}
-            onChange={(e) => setPatientName(e.target.value)}
-          />
-        </label>
-        <label>
-          Personnummer
-          <input
-            type="text"
-            placeholder="For the PDF header"
-            value={personnummer}
-            onChange={(e) => setPersonnummer(e.target.value)}
-          />
-        </label>
+        <DebouncedDateInput label="From" value={from} onChange={setFrom} />
+        <DebouncedDateInput label="To" value={to} onChange={setTo} />
       </section>
       {notice && <div className="notice">{notice}</div>}
       <section className="intro">
         <p className="eyebrow">CLINICAL OVERVIEW</p>
-        <h1>
-          {from || "Beginning"} — {to}
-        </h1>
-        <p>
-          {records.length.toLocaleString()} measurements from{" "}
-          {data.diagnostics.imported.toLocaleString()} imported records. Values
-          are from Apple Health and are not medical advice.
-        </p>
       </section>
-      <section className="cards">
-        {highlights.map((metric) => {
-          const item = latest(records, metric);
-          return (
-            <article className="card" key={metric}>
-              <span>{labels[metric]}</span>
-              <strong>{item ? format(item.value, item.unit) : "—"}</strong>
-              <small>
-                {item
-                  ? `Latest: ${new Date(item.date).toLocaleDateString()}`
-                  : "No records selected"}
-              </small>
-            </article>
-          );
-        })}
+      <section className="patient-profile" aria-label="Patient details">
+        <h2>Patient details</h2>
+        <PatientDetailsForm
+          key={JSON.stringify(patientProfile.current)}
+          initial={patientProfile.current}
+          onFieldChange={(field, value) => {
+            patientProfile.current = { ...patientProfile.current, [field]: value };
+          }}
+        />
       </section>
+      <OverviewCards records={overviewRecords} periodLabel="Last 30 days" />
+      <OverviewCards
+        records={yearOverviewRecords}
+        periodLabel="Last year"
+        collapsible
+      />
+      <OverviewCards
+        records={allTimeOverviewRecords}
+        periodLabel="All time"
+        collapsible
+      />
       <section className="dashboard">
         {metricGroups.map((group) => (
           <section key={group.title} className="group">
@@ -1270,6 +1466,7 @@ export function App() {
             />
           ))}
       </section>
-    </main>
+      </main>
+    </PrintLayoutContext.Provider>
   );
 }

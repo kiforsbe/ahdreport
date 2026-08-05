@@ -102,7 +102,28 @@ export function filtered(records: HealthRecord[], from: string, to: string) {
   });
 }
 export function latest(records: HealthRecord[], metric: Metric) {
-  return records.filter((r) => r.metric === metric).at(-1);
+  return records
+    .filter((record) => record.metric === metric)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .at(-1);
+}
+export function median(records: HealthRecord[], metric: Metric) {
+  const values = records
+    .filter((record) => record.metric === metric)
+    .map((record) => record.value)
+    .sort((a, b) => a - b);
+  if (!values.length) return undefined;
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2
+    ? values[middle]
+    : (values[middle - 1] + values[middle]) / 2;
+}
+export function change(records: HealthRecord[], metric: Metric) {
+  const values = records
+    .filter((record) => record.metric === metric)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (values.length < 2) return undefined;
+  return values.at(-1)!.value - values[0].value;
 }
 export function daily(records: HealthRecord[], metric: Metric) {
   const map = new Map<string, { total: number; count: number; unit: string }>();

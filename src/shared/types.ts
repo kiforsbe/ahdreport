@@ -35,15 +35,24 @@ export interface ImportDiagnostics {
   latest?: string;
   warnings: string[];
 }
+export interface PatientDetails {
+  name?: string;
+  identifier?: string;
+  dateOfBirth?: string;
+  sex?: string;
+}
 export interface HealthData {
   records: HealthRecord[];
   diagnostics: ImportDiagnostics;
+  patient?: PatientDetails;
 }
 export interface HealthAPI {
   importExport(): Promise<HealthData | null>;
   exportPdf(
     patientName: string,
     personnummer?: string,
+    dateOfBirth?: string,
+    sex?: string,
   ): Promise<{ path?: string; canceled: boolean }>;
 }
 

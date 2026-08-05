@@ -112,7 +112,7 @@ header span {
 .controls {
   display: flex;
   gap: 22px;
-  align-items: end;
+  align-items: flex-start;
   padding: 18px 0;
   border-bottom: 1px solid #e2e7ef;
 }
@@ -122,16 +122,27 @@ header span {
   font-size: 14px;
 }
 .controls label {
+  display: flex;
+  flex-direction: column;
   font-size: 12px;
   color: #667085;
 }
 .controls input {
   display: block;
-  margin-top: 5px;
+  height: 53px;
+  margin-top: 11px;
   border: 1px solid #d8deea;
   padding: 8px;
   border-radius: 7px;
   background: white;
+}
+.controls .presets button {
+  min-height: 53px;
+}
+.controls input:focus {
+  border-color: #4263eb;
+  outline: 2px solid #dce5ff;
+  outline-offset: 1px;
 }
 .intro {
   padding: 46px 0 22px;
@@ -147,6 +158,54 @@ header span {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 15px;
+}
+.cards-period {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.overview-card-section + .overview-card-section {
+  margin-top: 20px;
+}
+.overview-card-section summary {
+  cursor: pointer;
+}
+.patient-profile {
+  background: white;
+  border: 1px solid #e4e8ef;
+  border-radius: 12px;
+  margin: 0 0 20px;
+  padding: 14px 18px;
+}
+.patient-profile h2 {
+  font-size: 16px;
+  margin: 0;
+}
+.patient-fields {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 560px;
+}
+.patient-fields label {
+  align-items: center;
+  color: #667085;
+  display: grid;
+  font-size: 14px;
+  gap: 10px;
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+.patient-fields input {
+  background: white;
+  border: 1px solid #d8deea;
+  border-radius: 7px;
+  font: inherit;
+  padding: 8px;
+}
+.patient-export-details {
+  display: none;
+  margin: 12px 0 0;
 }
 .card,
 .panel {
@@ -180,8 +239,12 @@ header span {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 15px;
 }
+.print-layout .grid {
+  grid-template-columns: 1fr;
+}
 .panel {
   padding: 18px;
+  min-width: 0;
 }
 .panel h3 {
   margin: 0 0 7px;
@@ -297,6 +360,27 @@ td:nth-child(2) {
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
   }
+  .patient-profile {
+    break-inside: avoid;
+  }
+  .patient-fields {
+    display: none;
+  }
+  .patient-export-details {
+    display: grid;
+    gap: 5px;
+  }
+  .patient-export-details > div {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .patient-export-details dt {
+    color: #667085;
+  }
+  .patient-export-details dd {
+    margin: 0;
+  }
   .card {
     padding: 10px;
   }
@@ -311,6 +395,11 @@ td:nth-child(2) {
   }
   .panel {
     break-inside: avoid;
+  }
+  .panel .recharts-responsive-container,
+  .panel .recharts-wrapper,
+  .panel .recharts-surface {
+    width: 100% !important;
   }
   .print-report {
     margin-top: 22px;

@@ -50,13 +50,23 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+function formatClinicalDate(value?: string) {
+  if (!value || !/^\d{8}$/.test(value)) return value;
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+}
 ipcMain.handle(
   "health:exportPdf",
-  async (_event, patientName?: string, personnummer?: string) => {
+  async (
+    _event,
+    patientName?: string,
+    personnummer?: string,
+    dateOfBirth?: string,
+    sex?: string,
+  ) => {
     if (!mainWindow) return { canceled: true };
     const target = await dialog.showSaveDialog(mainWindow, {
       title: "Save health report",
-      defaultPath: "apple-health-report.pdf",
+      defaultPath: "adhreport.pdf",
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     if (target.canceled || !target.filePath) return { canceled: true };
@@ -64,6 +74,14 @@ ipcMain.handle(
     mainWindow.setBackgroundColor("#ffffff");
     const name = patientName?.trim();
     const pnr = personnummer?.trim();
+    const birthDate = formatClinicalDate(dateOfBirth?.trim());
+    const sexLabel = sex?.trim();
+    const patientSummary = [
+      name,
+      pnr,
+      birthDate && `Born: ${birthDate}`,
+      sexLabel,
+    ].filter((value): value is string => !!value);
     const printedOn = new Date().toLocaleDateString(undefined, {
       year: "numeric",
       month: "long",
@@ -71,9 +89,13 @@ ipcMain.handle(
     });
     const bandStyle =
       "font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#667085;font-family:sans-serif;-webkit-print-color-adjust:economy;";
-    const headerTemplate = `<div style="${bandStyle}"><span>${name ? escapeHtml(name) : "Health Atlas report"}${pnr ? " · " + escapeHtml(pnr) : ""}</span><span>Printed: ${escapeHtml(printedOn)}</span></div>`;
+    const headerTemplate = `<div style="${bandStyle}"><span>${patientSummary.length ? escapeHtml(patientSummary.join(" · ")) : "ADHReport"}</span><span>Printed: ${escapeHtml(printedOn)}</span></div>`;
     const footerTemplate = `<div style="${bandStyle}"><span></span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
     try {
+      await mainWindow.webContents.executeJavaScript(
+        'window.dispatchEvent(new Event("health-atlas:prepare-print"));',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 200));
       const pdf = await mainWindow.webContents.printToPDF({
         printBackground: false,
         pageSize: "A4",
@@ -84,6 +106,11 @@ ipcMain.handle(
       await (await import("node:fs/promises")).writeFile(target.filePath, pdf);
       return { canceled: false, path: target.filePath };
     } finally {
+      await mainWindow.webContents
+        .executeJavaScript(
+          'window.dispatchEvent(new Event("health-atlas:restore-layout"));',
+        )
+        .catch(() => undefined);
       mainWindow.setBackgroundColor(originalBackground);
     }
   },

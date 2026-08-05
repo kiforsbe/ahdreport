@@ -1,8 +1,8 @@
-# Health Atlas — Architecture & Design Specification
+# ADHReport — Architecture & Design Specification
 
 ## 1. Purpose
 
-Health Atlas is a local-first Electron desktop application that imports an Apple Health
+ADHReport is a local-first Electron desktop application that imports an Apple Health
 export (`export.xml` or the zipped `export.zip`), lets a user browse and filter their
 health metrics over a date range, and produces a printable / PDF clinical-style report.
 No data leaves the machine: import, parsing, aggregation, rendering, and PDF generation
@@ -265,7 +265,7 @@ sequenceDiagram
     User->>UI: Click "Export detailed PDF"
     UI->>Bridge: window.healthAPI.exportPdf()
     Bridge->>Main: ipcRenderer.invoke('health:exportPdf')
-    Main->>User: dialog.showSaveDialog, default apple-health-report.pdf
+    Main->>User: dialog.showSaveDialog, default adhreport.pdf
     alt canceled
         Main-->>Bridge: canceled true
     else path chosen
