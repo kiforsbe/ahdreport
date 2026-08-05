@@ -3,6 +3,6 @@ export type Metric = 'weight' | 'heartRate' | 'restingHeartRate' | 'bloodPressur
 export interface HealthRecord { metric: Metric; date: string; value: number; unit: string; source?: string; category?: string; }
 export interface ImportDiagnostics { fileName: string; imported: number; unsupported: number; earliest?: string; latest?: string; warnings: string[]; }
 export interface HealthData { records: HealthRecord[]; diagnostics: ImportDiagnostics; }
-export interface HealthAPI { importExport(): Promise<HealthData | null>; exportPdf(patientName: string): Promise<{ path?: string; canceled: boolean }>; }
+export interface HealthAPI { importExport(): Promise<HealthData | null>; exportPdf(patientName: string, personnummer?: string): Promise<{ path?: string; canceled: boolean }>; }
 
 declare global { interface Window { healthAPI: HealthAPI; } }

@@ -21,19 +21,20 @@ ipcMain.handle('health:import', async () => {
 function escapeHtml(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-ipcMain.handle('health:exportPdf', async (_event, patientName?: string) => {
+ipcMain.handle('health:exportPdf', async (_event, patientName?: string, personnummer?: string) => {
   if (!mainWindow) return { canceled: true };
   const target = await dialog.showSaveDialog(mainWindow, { title: 'Save health report', defaultPath: 'apple-health-report.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
   if (target.canceled || !target.filePath) return { canceled: true };
   const originalBackground = mainWindow.getBackgroundColor();
   mainWindow.setBackgroundColor('#ffffff');
   const name = patientName?.trim();
+  const pnr = personnummer?.trim();
   const printedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   const bandStyle = 'font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#667085;font-family:sans-serif;-webkit-print-color-adjust:economy;';
-  const headerTemplate = `<div style="${bandStyle}"><span>${name ? escapeHtml(name) : 'Health Atlas report'}</span><span>Printed ${escapeHtml(printedOn)}</span></div>`;
-  const footerTemplate = `<div style="${bandStyle}"><span>Health Atlas — private health report</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
+  const headerTemplate = `<div style="${bandStyle}"><span>${name ? escapeHtml(name) : 'Health Atlas report'}${pnr ? ' · ' + escapeHtml(pnr) : ''}</span><span>Printed: ${escapeHtml(printedOn)}</span></div>`;
+  const footerTemplate = `<div style="${bandStyle}"><span></span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
   try {
-    const pdf = await mainWindow.webContents.printToPDF({ printBackground: false, pageSize: 'A4', displayHeaderFooter: true, headerTemplate, footerTemplate, margins: { marginType: 'custom', top: 60, bottom: 60, left: 38, right: 38 } });
+    const pdf = await mainWindow.webContents.printToPDF({ printBackground: false, pageSize: 'A4', displayHeaderFooter: true, headerTemplate, footerTemplate });
     await (await import('node:fs/promises')).writeFile(target.filePath, pdf);
     return { canceled: false, path: target.filePath };
   } finally {
