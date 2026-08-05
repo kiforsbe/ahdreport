@@ -1,106 +1,92 @@
-# AHDReport — Architecture & Design Specification
+# AHDReport architecture
 
-## 1. Purpose
+## 1. System purpose
 
-AHDReport is a local-first Electron desktop application that imports an Apple Health
-export (`export.xml` or the zipped `export.zip`), lets a user browse and filter their
-health metrics over a date range, and produces a printable / PDF clinical-style report.
-No data leaves the machine: import, parsing, aggregation, rendering, and PDF generation
-all happen locally.
+AHDReport is a local-first Electron desktop application for viewing Apple Health data
+and producing a clinical-style A4 PDF. It accepts a standalone `export.xml` or an
+Apple Health ZIP containing `export.xml`. When a ZIP also contains a CDA/clinical XML
+file, AHDReport extracts available patient demographics from its `recordTarget`.
 
-## 2. Process Architecture
+The application has no server component, database, account system, or network API.
+Imported records and user edits live only in the current renderer session. The main
+process performs file access and PDF creation; the renderer performs filtering,
+aggregation, visualization, and report composition.
 
-The app follows Electron's standard three-context split. The renderer has **no** direct
-Node.js or filesystem access; all privileged work (file dialogs, filesystem reads, PDF
-capture) happens in the main process and is exposed to the renderer through a narrow,
-typed `contextBridge` API.
+## 2. Runtime architecture
 
 ```mermaid
 flowchart LR
-    subgraph MAIN["Main process (Node.js) — electron/main.ts"]
-        M1["BrowserWindow\n(sandbox: true, contextIsolation: true,\nnodeIntegration: false)"]
-        M2["ipcMain.handle('health:import')"]
-        M3["ipcMain.handle('health:exportPdf')"]
-        M4["appleHealthParser.ts"]
-        M5["dialog.showOpenDialog /\ndialog.showSaveDialog"]
-        M6["fs.readFile / fs.writeFile"]
+    subgraph Main["Electron main process"]
+        Window["BrowserWindow lifecycle"]
+        ImportIPC["health:import handler"]
+        PdfIPC["health:exportPdf handler"]
+        Parser["Apple Health parser"]
+        Dialogs["Native open/save dialogs"]
+        Files["Local filesystem"]
     end
 
-    subgraph PRELOAD["Preload (isolated bridge) — electron/preload.cts"]
-        P1["contextBridge.exposeInMainWorld('healthAPI', …)"]
+    subgraph Preload["Sandboxed preload"]
+        Bridge["window.healthAPI"]
     end
 
-    subgraph RENDERER["Renderer process (Chromium) — src/*"]
-        R1["main.tsx → App.tsx (React 19)"]
-        R2["report.ts\n(filtering / aggregation)"]
-        R3["recharts + custom SVG\n(charts, tables)"]
-        R4["window.healthAPI"]
+    subgraph Renderer["Chromium renderer"]
+        App["React App"]
+        Report["Pure report helpers"]
+        Charts["Recharts and custom SVG"]
+        PrintState["Synchronized print layout"]
     end
 
-    R4 -- "ipcRenderer.invoke" --> P1
-    P1 -- "contextBridge" --> M2
-    P1 -- "contextBridge" --> M3
-    M2 --> M5 --> M6
-    M2 --> M4
-    M4 -- "HealthData" --> M2
-    M2 -- "IPC result" --> P1
-    P1 --> R4
-    M3 --> M5
-    M3 -- "webContents.printToPDF" --> M6
-    R1 --> R2 --> R3
-    R1 -- "uses" --> R4
+    App --> Report --> Charts
+    App --> Bridge
+    Bridge -->|ipcRenderer.invoke| ImportIPC
+    Bridge -->|ipcRenderer.invoke| PdfIPC
+    ImportIPC --> Dialogs --> Files
+    ImportIPC --> Parser
+    Parser -->|HealthData| ImportIPC
+    PdfIPC --> Dialogs
+    PdfIPC -->|prepare and restore| PrintState
+    PdfIPC -->|printToPDF and writeFile| Files
+    Window --> App
 ```
 
-**Why this shape:** `nodeIntegration: false` + `contextIsolation: true` + `sandbox: true`
-(`electron/main.ts:10`) mean the renderer (which loads a normal web page / React app) can
-never reach `fs`, `child_process`, or other Node APIs directly, even if it were later
-compromised (e.g. via a malicious SVG/XML payload). The only surface it has is the two
-functions the preload script explicitly whitelists.
+The renderer is configured with `contextIsolation: true`, `nodeIntegration: false`,
+and `sandbox: true`. It cannot use Node.js or the filesystem directly. The preload
+script exposes two operations through `window.healthAPI`:
 
-## 3. Module Map
+- `importExport()` opens a native file chooser and returns `HealthData | null`.
+- `exportPdf(patientName, personnummer, dateOfBirth, sex)` opens a save dialog and
+  returns `{ canceled, path? }`.
 
-| Layer | File | Responsibility |
+The IPC surface does not accept arbitrary input or output paths; the main process owns
+both native dialogs.
+
+## 3. Module map
+
+| Runtime/layer | File | Responsibility |
 |---|---|---|
-| Main | `electron/main.ts` | App lifecycle, `BrowserWindow` creation, IPC handlers for import & PDF export |
-| Main | `electron/appleHealthParser.ts` | Unzips/reads the export, parses HealthKit XML into typed, deduplicated `HealthRecord[]` |
-| Bridge | `electron/preload.cts` | Exposes `window.healthAPI` (`importExport`, `exportPdf`) via `contextBridge` |
-| Shared | `src/shared/types.ts` | Types shared by main and renderer: `Metric`, `HealthRecord`, `HealthData`, `HealthAPI` |
-| Renderer entry | `src/main.tsx` | Mounts the React tree, loads global stylesheets |
-| Renderer | `src/App.tsx` | All UI: landing/import screen, dashboard, charts, printable report tables |
-| Renderer | `src/report.ts` | Pure functions: date filtering, daily average/total/statistics aggregation, formatting |
-| Styling | `src/styles.css`, `src/table-overrides.css` | Screen + print stylesheets |
-| Tests | `tests/*.test.ts` | Vitest unit tests for the parser and the report/aggregation functions |
+| Electron main | `electron/main.ts` | Window lifecycle, native dialogs, IPC handlers, patient PDF header, synchronized PDF capture, filesystem writes |
+| Electron main | `electron/appleHealthParser.ts` | ZIP discovery, HealthKit XML parsing, CDA patient extraction, metric mapping, validation, deduplication, diagnostics |
+| Preload | `electron/preload.cts` | Narrow `contextBridge` adapter between renderer calls and IPC channels |
+| Shared contract | `src/shared/types.ts` | Metrics and IPC data types compiled for both Electron and renderer targets |
+| Renderer entry | `src/main.tsx` | React root and stylesheet loading |
+| Renderer | `src/App.tsx` | Session state, patient editor, overview cards, charts, detailed tables, and print-layout readiness protocol |
+| Renderer model | `src/report.ts` | Pure filtering, formatting, daily aggregation, medians, deltas, and metric metadata |
+| Styling | `src/styles.css` | Application, responsive, card, chart, and print presentation |
+| Styling | `src/table-overrides.css` | Detailed-report table width overrides |
+| Tests | `tests/appleHealthParser.test.ts` | Apple XML, ZIP, CDA, duplicate, sleep, and invalid-file behavior |
+| Tests | `tests/report.test.ts` | Date filtering, daily statistics, medians, latest values, and deltas |
 
-Only `src/shared/types.ts` is imported by *both* the Node-side (`electron/`) and the
-browser-side (`src/`) code — it is the contract between the two worlds and is compiled
-twice: once by `tsconfig.json` (renderer, DOM libs) and once by `tsconfig.electron.json`
-(Node target).
+`src/shared/types.ts` is the boundary contract. The Electron build and renderer build
+compile it independently; runtime values crossing IPC are plain serializable objects.
 
-## 4. Domain Model (Class Diagram)
+## 4. Core data model
 
 ```mermaid
 classDiagram
-    class Metric {
-        <<enumeration>>
-        weight
-        heartRate
-        restingHeartRate
-        bloodPressureSystolic
-        bloodPressureDiastolic
-        bodyTemperature
-        steps
-        activeEnergy
-        exerciseTime
-        distance
-        sleep
-        walkingSpeed
-        stepLength
-        walkingAsymmetry
-        doubleSupport
-        stairAscentSpeed
-        stairDescentSpeed
-        sixMinuteWalk
-        medication
+    class HealthData {
+        +HealthRecord[] records
+        +ImportDiagnostics diagnostics
+        +PatientDetails patient
     }
 
     class HealthRecord {
@@ -112,6 +98,13 @@ classDiagram
         +string category
     }
 
+    class PatientDetails {
+        +string name
+        +string identifier
+        +string dateOfBirth
+        +string sex
+    }
+
     class ImportDiagnostics {
         +string fileName
         +number imported
@@ -119,22 +112,6 @@ classDiagram
         +string earliest
         +string latest
         +string[] warnings
-    }
-
-    class HealthData {
-        +HealthRecord[] records
-        +ImportDiagnostics diagnostics
-    }
-
-    class PdfExportResult {
-        +string path
-        +boolean canceled
-    }
-
-    class HealthAPI {
-        <<interface>>
-        +importExport() Promise~HealthData~
-        +exportPdf() Promise~PdfExportResult~
     }
 
     class DailyStats {
@@ -149,186 +126,263 @@ classDiagram
 
     HealthData "1" *-- "0..*" HealthRecord
     HealthData "1" *-- "1" ImportDiagnostics
-    HealthRecord ..> Metric : typed by
-    DailyStats ..> HealthRecord : derived from report.ts
-    HealthAPI ..> HealthData : returns
-    HealthAPI ..> PdfExportResult : returns
+    HealthData "1" o-- "0..1" PatientDetails
+    DailyStats ..> HealthRecord : derived from
 ```
 
-Notes on the model above:
+`Metric` is a closed TypeScript string union. Supported values cover weight, heart
+rate and resting heart rate, systolic and diastolic pressure, temperature, sleep,
+activity, walking/mobility measurements, and medication records.
 
-- `Metric` is modeled as an `<<enumeration>>` even though in TypeScript it's a string
-  union (`src/shared/types.ts:1`), which is the closest UML equivalent for a closed set
-  of literal values.
-- `source`, `category`, `earliest`, and `latest` are all optional (`?`) in the TypeScript
-  source; UML attributes don't have a first-class optional marker, so treat every field
-  above as potentially absent unless the accompanying prose says otherwise.
-- `HealthAPI.importExport()` actually resolves to `Promise<HealthData | null>` — `null`
-  when the user cancels the file-picker dialog. `PdfExportResult` mirrors the anonymous
-  `{ path?: string; canceled: boolean }` return type of `exportPdf()` (`src/shared/types.ts:6`);
-  it isn't a named type in the code, only introduced here for diagram clarity.
-- `DailyStats` (`src/report.ts:13`) is not persisted or transferred over IPC — it is a
-  derived, renderer-only aggregate computed on demand from the currently-filtered
-  `HealthRecord[]` for a single metric.
+Optional properties are shown without optionality markers in the diagram. In the
+source, `HealthData.patient`, the individual patient fields, `source`, `category`,
+`earliest`, and `latest` can be absent.
 
-## 5. Component Diagram — Renderer UI
+Dates on `HealthRecord` are normalized to ISO timestamps and records are sorted in
+ascending timestamp order before leaving the parser. `DailyStats` is a renderer-only
+derived model and is never persisted or transferred over IPC.
 
-```mermaid
-flowchart TB
-    App["App() — src/App.tsx\n(owns: data, from, to, notice state)"]
-
-    Landing["Landing screen\n(shown when data === null)"]
-    Dashboard["Dashboard\n(cards, controls, group charts, medication, diagnostics)"]
-    PrintReport["Printable report\n(.print-report — screen-hidden, print-visible)"]
-
-    App --> Landing
-    App --> Dashboard
-    App --> PrintReport
-
-    Dashboard --> Cards["highlight cards\n(weight, resting HR, steps, sleep)"]
-    Dashboard --> Controls["date-range controls\n(7D/30D/90D/YTD/All time presets)"]
-    Dashboard --> MetricChart["MetricChart\n(AreaChart, per metric)"]
-    Dashboard --> BpChart["BloodPressureChart\n(ComposedChart: floating range bars\n+ avg tick, systolic & diastolic)"]
-
-    PrintReport --> VitalsTable["VitalsReportTable\n(BP + heart rate + weight, per day)"]
-    PrintReport --> ActivityTable["ActivityReportTable\n(steps/distance/energy/sleep totals)"]
-    PrintReport --> WalkingTable["WalkingReportTable\n(gait metrics, compact distributions)"]
-    PrintReport --> ReportTable["ReportTable\n(all remaining metrics)"]
-
-    VitalsTable --> DailyDistribution["DailyDistribution\n(min/avg/max + σ band, SVG)"]
-    ActivityTable --> DailyDistribution
-    WalkingTable --> DailyDistribution
-    ReportTable --> DailyDistribution
-    ReportTable --> DayTrace["DayTrace\n(intra-day sparkline, SVG)"]
-
-    App -.->|"filtered(records, from, to)"| ReportLib["report.ts"]
-    MetricChart -.->|"daily()"| ReportLib
-    BpChart -.->|"dailyStats()"| ReportLib
-    ActivityTable -.->|"dailyTotals() / dailyStats()"| ReportLib
-    VitalsTable -.->|"dailyStats()"| ReportLib
-    WalkingTable -.->|"dailyStats()"| ReportLib
-    ReportTable -.->|"dailyStats()"| ReportLib
-```
-
-`App.tsx` is intentionally a flat, single-file component tree (no routing, no global
-state library) — the only piece of state is `{ data, from, to, notice }`, and every chart
-or table is a pure function of `records` (the already date-filtered slice) plus the
-`report.ts` aggregation helpers. There is one DOM tree containing both the interactive
-dashboard and the `.print-report` section; CSS `@media print` rules toggle which parts
-are visible, so printing/PDF export needs no separate render pass.
-
-## 6. Sequence — Import an Apple Health export
+## 5. Import pipeline
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant UI as App.tsx (renderer)
-    participant Bridge as preload.cts (contextBridge)
-    participant Main as main.ts (ipcMain)
-    participant Parser as appleHealthParser.ts
-    participant FS as Filesystem
+    participant UI as Renderer App
+    participant Bridge as Preload bridge
+    participant Main as Electron main
+    participant Parser as appleHealthParser
+    participant ZIP as JSZip / XML parser
 
-    User->>UI: Click "Import Apple Health export"
-    UI->>Bridge: window.healthAPI.importExport()
-    Bridge->>Main: ipcRenderer.invoke('health:import')
-    Main->>FS: dialog.showOpenDialog (.zip or .xml)
-    FS-->>Main: selected file path, or canceled
+    User->>UI: Choose Import Apple Health export
+    UI->>Bridge: importExport()
+    Bridge->>Main: invoke health:import
+    Main->>User: Native .zip/.xml file dialog
     alt canceled
-        Main-->>Bridge: null
-        Bridge-->>UI: null, no state change
-    else file chosen
-        Main->>FS: readFile(path)
-        FS-->>Main: file contents as a Buffer
-        Main->>Parser: parseAppleHealthExport(buffer, fileName)
-        Parser->>Parser: unzip if .zip, then locate export.xml
-        Parser->>Parser: XMLParser.parse() to get HealthKit records
-        Parser->>Parser: map HK type to Metric, dedupe, sort by date
-        Parser-->>Main: HealthData with records and diagnostics
-        Main-->>Bridge: HealthData
-        Bridge-->>UI: HealthData
-        UI->>UI: setData(result), then set from/to from earliest and latest dates
-        UI->>User: renders dashboard and printable report
+        Main-->>UI: null
+    else selected
+        Main->>Main: read selected file into Buffer
+        Main->>Parser: parseAppleHealthExport(buffer, filename)
+        alt ZIP
+            Parser->>ZIP: load archive and find export.xml
+            Parser->>ZIP: read export.xml as text
+            Parser->>ZIP: find first CDA/clinical XML candidate
+            Parser->>ZIP: stream until complete recordTarget
+        else standalone XML
+            Parser->>Parser: decode Buffer as UTF-8 export.xml
+        end
+        Parser->>Parser: validate, map, normalize, deduplicate, sort
+        Parser-->>UI: HealthData through IPC
+        UI->>UI: initialize range and patient fields
     end
 ```
 
-## 7. Sequence — Export to PDF
+### 5.1 Health records
 
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as App.tsx (renderer)
-    participant Bridge as preload.cts
-    participant Main as main.ts (ipcMain)
-    participant Win as BrowserWindow.webContents
-    participant FS as Filesystem
+For a ZIP, the parser finds an entry whose path ends in `export.xml`. The main Apple
+Health XML is currently read and parsed in full with `fast-xml-parser`. Each supported
+HealthKit type maps to an internal `Metric`; unsupported types increment a diagnostic
+counter. Invalid dates and non-numeric values are skipped.
 
-    User->>UI: Click "Export detailed PDF"
-    UI->>Bridge: window.healthAPI.exportPdf()
-    Bridge->>Main: ipcRenderer.invoke('health:exportPdf')
-    Main->>User: dialog.showSaveDialog, default ahdreport.pdf
-    alt canceled
-        Main-->>Bridge: canceled true
-    else path chosen
-        Main->>Win: printToPDF with printBackground and A4 page size
-        Win-->>Main: PDF buffer<br/>renders the already-visible DOM, @media print rules applied
-        Main->>FS: writeFile(path, buffer)
-        Main-->>Bridge: canceled false, with the saved path
-    end
-    Bridge-->>UI: result
-    UI->>User: notice - PDF saved to the selected path
+Sleep records are converted from their start/end timestamps to duration in hours.
+Exact duplicates are removed using metric, normalized timestamp, value, unit, and
+source name. The parser returns imported count, unsupported count, earliest/latest
+timestamps, and warnings such as missing medication data or unreadable clinical data.
+
+### 5.2 CDA patient extraction
+
+Clinical candidates match names containing `cda` or `clinical`, including common files
+such as `export_cda.xml` and `clinical_data.xml`. Unlike `export.xml`, the clinical ZIP
+entry is not decoded in full. `readClinicalPatient` consumes its node stream only until
+the closing `recordTarget` tag is available, destroys the stream, and parses a small
+synthetic `ClinicalDocument` containing that fragment.
+
+Namespace prefixes are removed for CDA parsing. The extractor supports inline names
+and structured prefix/given/family names, birth time, administrative sex, and
+`patientRole/id` extensions. A Swedish-style 12-digit identifier is preferred when
+multiple identifiers exist; otherwise the first extension is used.
+
+This optimization limits CDA work, but it does not make the full import streaming:
+the selected file is still read into a `Buffer`, JSZip loads the archive, and
+`export.xml` is still materialized and parsed in memory.
+
+## 6. Patient-data precedence and editing
+
+Patient values are resolved once after import with this precedence for each field:
+
+```text
+non-empty VITE_DEFAULT_* value → CDA value → empty field
 ```
 
-Because `printToPDF` captures the **already-rendered** page, there is no second
-render/navigation step — the same `.print-report` DOM that is hidden on screen (via
-`@media print` CSS) is what gets captured, so the PDF and the interactive dashboard are
-always in sync with the currently selected date range.
+The supported Vite variables are:
 
-## 8. Data Flow Summary
+- `VITE_DEFAULT_PATIENT_NAME`
+- `VITE_DEFAULT_PERSONNUMMER`
+- `VITE_DEFAULT_DATE_OF_BIRTH`
+- `VITE_DEFAULT_SEX`
+
+These are build-time renderer values, not secrets. `.env` is ignored by Git and
+`.env.example` contains fictional defaults. Non-empty environment values override the
+corresponding CDA values; empty or unset variables do not.
+
+`PatientDetailsForm` owns draft input state locally. It writes changes into a ref held
+by `App`, which avoids re-filtering hundreds of thousands of health records on every
+keystroke. The same current ref values are passed to the PDF IPC call. Viewer mode
+shows editable controls; print CSS hides the controls and shows a text-only definition
+list containing name, personnummer, date of birth, and sex.
+
+## 7. Renderer state and data flow
+
+`App` deliberately uses React state and memoization rather than a global state library:
+
+- `data` holds the imported `HealthData` for the current session.
+- `from` and `to` define the inclusive selected report period.
+- date inputs keep local drafts and debounce updates by 300 ms.
+- `notice` contains import/export feedback.
+- `printLayout` selects the dedicated PDF-safe chart tree.
+- `patientProfile` is a ref so editing demographics does not rerender the report.
 
 ```mermaid
 flowchart LR
-    XML["export.xml / export.zip"] -->|"parseAppleHealthExport"| Records["HealthRecord[]\n(typed, deduped, sorted)"]
-    Records -->|"filtered(from, to)"| Filtered["date-range slice"]
-    Filtered -->|"daily / dailyTotals / dailyStats"| Aggregates["per-day series & stats"]
-    Aggregates --> Charts["recharts visuals"]
-    Aggregates --> Tables["print-report tables"]
-    Charts --> Screen["on-screen dashboard"]
-    Tables --> PDF["printToPDF → saved .pdf"]
+    Imported["HealthData.records"] --> Selected["filtered(from, to)"]
+    Imported --> Last30["filtered(last 30 days, to)"]
+    Imported --> Last365["filtered(last 365 days, to)"]
+    Imported --> AllTime["filtered(beginning, to)"]
+
+    Selected --> Daily["daily / dailyTotals / dailyStats"]
+    Daily --> Charts
+    Daily --> DetailTables["Detailed daily tables"]
+    Last30 --> Cards30["Visible overview cards"]
+    Last365 --> Cards365["Collapsed overview cards"]
+    AllTime --> CardsAll["Collapsed overview cards"]
 ```
 
-## 9. Build & Tooling
+Quick ranges are 7 days, 30 days, 90 days, last 365 days, year-to-date, and all time.
+The primary overview uses the 30 days ending at `to`; last-year and all-time summaries
+are present in collapsed `<details>` sections.
 
-| Concern | Tool | Notes |
-|---|---|---|
-| Renderer bundling | Vite 6 (`vite.config.ts`) | `base: './'` so `dist/index.html` loads with relative asset paths under `file://` in packaged builds |
-| Renderer types | `tsconfig.json` | `strict`, DOM libs, `noEmit` (Vite handles transpilation) |
-| Electron/Node compile | `tsconfig.electron.json` + `tsc` | Compiles `electron/` + `src/shared/` to `dist-electron/`, `NodeNext` module resolution |
-| Dev loop | `concurrently` + `wait-on` | `npm run dev` starts Vite on `127.0.0.1:5173`, waits for it, then launches Electron pointed at `VITE_DEV_SERVER_URL` |
-| Packaging input | `dist/` (renderer) + `dist-electron/` (main/preload) | `main.ts` loads `dist/index.html` directly when `VITE_DEV_SERVER_URL` is unset |
-| Tests | Vitest | `tests/report.test.ts` (aggregation/filtering), `tests/appleHealthParser.test.ts` (XML/zip parsing) — both exercise pure functions with no Electron runtime needed |
+The four overview metrics are weight, heart rate, steps, and sleep. Weight shows the
+latest reading plus first-to-last delta. The others show medians and ranges. Heart-rate
+"sustained" bounds use Tukey fences (1.5 × IQR) so isolated spikes do not define the
+displayed minimum and maximum.
 
-## 10. Security Model
+## 8. Visualization and detailed report composition
 
-- **Renderer sandboxing**: `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`
-  (`electron/main.ts:10`) — the imported XML/zip is parsed entirely in the main process;
-  the renderer only ever sees the resulting plain-data `HealthData` object.
-- **Minimal IPC surface**: exactly two channels (`health:import`, `health:exportPdf`),
-  both parameterless from the renderer's side — the renderer cannot pass an arbitrary
-  file path into the main process; the main process always drives the native file dialog.
-- **No network egress**: there is no HTTP client anywhere in the codebase; all
-  computation and rendering happens on-device, matching the "nothing is uploaded"
-  claim shown on the landing screen.
+Dashboard groups are Vitals, Sleep & activity, and Mobility. Standard metric trends use
+Recharts area charts. Blood pressure uses a composed chart with systolic and diastolic
+daily ranges plus an average tick; the UI does not describe these series as "upper" or
+"lower".
 
-## 11. Known Constraints / Non-Goals
+The detailed section is part of the same React document and is available in both viewer
+and PDF modes. It contains specialized tables:
 
-- Single-window, single-session app — no persistence between launches (closing the app
-  discards the imported data; the user re-imports each session).
-- No manual data entry — medication and all other metrics are read-only reflections of
-  the Apple Health export; `App.tsx` explicitly disables manual medication entry.
-- Report tables cap at `MAX_TABLE_ROWS` (365) most recent days per section, to keep the
-  printed/PDF report a bounded size. When a table or metric column has more data than
-  that, or when a specific metric's own data starts later or ends earlier than the
-  selected report period, `App.tsx` renders an explicit note (`coverageNote` /
-  `truncationNote`) under that table or chart rather than silently truncating.
-- Single supported source format: Apple Health's HealthKit XML export (`export.xml`,
-  optionally zipped as `export.zip`); no support for other wearable/health export formats.
+- `VitalsReportTable` combines pressure, heart rate, and weight.
+- `ActivityReportTable` shows per-day totals as in-cell bars.
+- `WalkingReportTable` combines mobility metrics.
+- `ReportTable` handles remaining supported metrics.
+
+`DailyDistribution` is a custom SVG showing daily min/max, average, standard deviation,
+and shared column bounds. `DayTrace` shows intra-day shape. Distribution bounds also use
+Tukey fences to prevent a rare bad reading from flattening every other row. Each report
+section is limited to the 365 most recent days and emits explicit truncation or coverage
+notes when the selected period and available data differ.
+
+## 9. PDF export protocol
+
+PDF export requires a separate layout pass because a chart measured in the 1440px
+viewer cannot be safely scaled into an A4 card. The renderer therefore exposes an
+internal `window.healthAtlasPrintLayout(active)` promise for the main process to call.
+This is not part of the preload API and is only used by AHDReport's own main process.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Renderer
+    participant Bridge as Preload
+    participant Main as Electron main
+    participant DOM as React / Chromium
+    participant FS as Filesystem
+
+    User->>UI: Export detailed PDF
+    UI->>Bridge: exportPdf(current patient fields)
+    Bridge->>Main: invoke health:exportPdf
+    Main->>User: Native save dialog
+    alt canceled
+        Main-->>UI: canceled
+    else selected
+        Main->>DOM: await healthAtlasPrintLayout(true)
+        DOM->>DOM: flushSync print state
+        DOM->>DOM: await fonts and two animation frames
+        DOM->>DOM: verify print-chart readiness markers
+        DOM-->>Main: print layout ready
+        Main->>DOM: invalidate and await capturePage compositor fence
+        Main->>DOM: printToPDF(A4, header/footer)
+        DOM-->>Main: PDF Buffer
+        Main->>FS: writeFile
+        Main->>DOM: await healthAtlasPrintLayout(false)
+        Main-->>UI: saved path
+    end
+```
+
+In print layout:
+
+- the report root is fixed to 718px, matching the intended A4 content geometry;
+- chart grids become one column;
+- Recharts `ResponsiveContainer` is replaced by explicit 680 × 260 chart canvases;
+- every fixed chart emits a `data-pdf-chart-ready` marker;
+- actions, date inputs, notices, chart coverage notes, and the pressure legend are hidden;
+- the selected From/To range and patient details are rendered as plain text;
+- the main process adds a patient summary header, printed date, and page numbering.
+
+The renderer uses `flushSync`, font readiness, animation frames, and structural chart
+checks before resolving the preparation promise. The main process then waits for a
+Chromium compositor frame before `printToPDF`. A `finally` block restores viewer layout
+and the original window background even if PDF creation or writing fails.
+
+## 10. Build and development
+
+| Concern | Implementation |
+|---|---|
+| Renderer development | Vite dev server on `127.0.0.1:5173` |
+| Renderer production build | `vite build` to `dist/`; relative `base: './'` supports `file://` loading |
+| Electron build | `tsc -p tsconfig.electron.json` to `dist-electron/` using NodeNext modules |
+| Development orchestration | `concurrently`, `wait-on`, and `VITE_DEV_SERVER_URL` |
+| Testing | Vitest tests pure parser and report functions without launching Electron |
+| CI | `.github/workflows/ci.yml` installs dependencies, tests, and builds the project |
+
+Commands:
+
+```bash
+npm run dev
+npm test
+npm run build
+```
+
+## 11. Security and privacy properties
+
+- The renderer is sandboxed and receives only serialized health data through the
+  preload bridge.
+- Native dialogs, local reads, and PDF writes remain in the main process.
+- CDA/XML text is rendered as React data, not injected as HTML. Patient text used in
+  Electron's PDF header template is HTML-escaped.
+- The repository contains no application network client or telemetry path.
+- Session data is not persisted by AHDReport and is discarded when the session is
+  cleared or the application closes.
+- `.env` and common Apple Health export paths are ignored by Git to reduce accidental
+  disclosure. `VITE_*` variables are embedded in renderer code and must not contain
+  credentials or other secrets.
+
+The parser still processes untrusted local files in the privileged main process and
+materializes the primary HealthKit XML in memory. File-size limits, streaming
+`export.xml` parsing, and deeper XML resource controls would be appropriate future
+hardening for very large or adversarial inputs.
+
+## 12. Current constraints and non-goals
+
+- One window and one in-memory session; there is no history or persistence layer.
+- Apple Health XML/ZIP is the only import format.
+- Patient demographics are editable, but health measurements are read-only.
+- Medication is reported only when supported records exist; there is no manual
+  medication entry workflow.
+- Detailed tables are capped at 365 days per section to bound report size.
+- The renderer is intentionally concentrated in `App.tsx`; splitting it into feature
+  modules may become useful as the UI and automated component-test surface grow.
