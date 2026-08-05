@@ -66,6 +66,7 @@ both native dialogs.
 |---|---|---|
 | Electron main | `electron/main.ts` | Window lifecycle, native dialogs, IPC handlers, patient PDF header, synchronized PDF capture, filesystem writes |
 | Electron main | `electron/appleHealthParser.ts` | ZIP discovery, HealthKit XML parsing, CDA patient extraction, metric mapping, validation, deduplication, diagnostics |
+| Electron main | `electron/patientDefaults.ts` | Runtime patient defaults files, environment mapping, source precedence, and CDA/default merging |
 | Preload | `electron/preload.cts` | Narrow `contextBridge` adapter between renderer calls and IPC channels |
 | Shared contract | `src/shared/types.ts` | Metrics and IPC data types compiled for both Electron and renderer targets |
 | Renderer entry | `src/main.tsx` | React root and stylesheet loading |
@@ -207,22 +208,33 @@ the selected file is still read into a `Buffer`, JSZip loads the archive, and
 
 ## 6. Patient-data precedence and editing
 
-Patient values are resolved once after import with this precedence for each field:
+Patient defaults are loaded by the Electron main process during every import. Sources
+are merged from lowest to highest priority:
 
 ```text
-non-empty VITE_DEFAULT_* value → CDA value → empty field
+working-directory .env
+  → Electron user-data patient.env
+  → file selected by AHDREPORT_PATIENT_ENV_FILE
+  → process environment
 ```
 
-The supported Vite variables are:
+The final non-empty runtime value for an individual field overrides its imported CDA
+value. Supported variable names are:
 
-- `VITE_DEFAULT_PATIENT_NAME`
-- `VITE_DEFAULT_PERSONNUMMER`
-- `VITE_DEFAULT_DATE_OF_BIRTH`
-- `VITE_DEFAULT_SEX`
+- `AHDREPORT_PATIENT_NAME`
+- `AHDREPORT_PERSONNUMMER`
+- `AHDREPORT_DATE_OF_BIRTH`
+- `AHDREPORT_SEX`
 
-These are build-time renderer values, not secrets. `.env` is ignored by Git and
-`.env.example` contains fictional defaults. Non-empty environment values override the
-corresponding CDA values; empty or unset variables do not.
+`VITE_DEFAULT_*` equivalents remain supported by the main-process parser only as a
+legacy migration fallback. `App.tsx` contains no `import.meta.env` patient lookups, so
+neither current nor legacy values are substituted into the renderer bundle by Vite.
+
+The result is still not an encrypted secret: defaults are stored as plain text, sent to
+the renderer as part of `HealthData.patient`, and held in memory while the editable
+fields are visible. The design prevents build-time disclosure and allows values to be
+changed without rebuilding. `.env` is ignored by Git and `.env.example` contains only
+fictional values.
 
 `PatientDetailsForm` owns draft input state locally. It writes changes into a ref held
 by `App`, which avoids re-filtering hundreds of thousands of health records on every
@@ -368,8 +380,8 @@ npm run build
 - Session data is not persisted by AHDReport and is discarded when the session is
   cleared or the application closes.
 - `.env` and common Apple Health export paths are ignored by Git to reduce accidental
-  disclosure. `VITE_*` variables are embedded in renderer code and must not contain
-  credentials or other secrets.
+  disclosure. Runtime patient defaults are loaded only by the main process and are not
+  compiled into renderer assets, but their plain-text files still require protection.
 
 The parser still processes untrusted local files in the privileged main process and
 materializes the primary HealthKit XML in memory. File-size limits, streaming

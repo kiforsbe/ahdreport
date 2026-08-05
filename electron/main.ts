@@ -3,6 +3,10 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseAppleHealthExport } from "./appleHealthParser.js";
+import {
+  loadPatientDefaults,
+  mergePatientDetails,
+} from "./patientDefaults.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow: BrowserWindow | undefined;
@@ -41,7 +45,21 @@ ipcMain.handle("health:import", async () => {
   });
   if (choice.canceled || !choice.filePaths[0]) return null;
   const target = choice.filePaths[0];
-  return parseAppleHealthExport(await readFile(target), path.basename(target));
+  const [data, defaults] = await Promise.all([
+    parseAppleHealthExport(await readFile(target), path.basename(target)),
+    loadPatientDefaults({
+      workingDirectory: process.cwd(),
+      userDataDirectory: app.getPath("userData"),
+    }),
+  ]);
+  return {
+    ...data,
+    patient: mergePatientDetails(data.patient, defaults.patient),
+    diagnostics: {
+      ...data.diagnostics,
+      warnings: [...data.diagnostics.warnings, ...defaults.warnings],
+    },
+  };
 });
 function escapeHtml(value: string) {
   return value

@@ -58,11 +58,11 @@ type PatientProfile = {
   dateOfBirth: string;
   sex: string;
 };
-const patientDefaults: PatientProfile = {
-  name: import.meta.env.VITE_DEFAULT_PATIENT_NAME?.trim() ?? "",
-  personnummer: import.meta.env.VITE_DEFAULT_PERSONNUMMER?.trim() ?? "",
-  dateOfBirth: import.meta.env.VITE_DEFAULT_DATE_OF_BIRTH?.trim() ?? "",
-  sex: import.meta.env.VITE_DEFAULT_SEX?.trim() ?? "",
+const emptyPatientProfile: PatientProfile = {
+  name: "",
+  personnummer: "",
+  dateOfBirth: "",
+  sex: "",
 };
 function rangeDate(days: number, end: string) {
   const d = end ? new Date(`${end}T12:00:00`) : new Date();
@@ -1233,7 +1233,7 @@ export function App() {
   const [printLayout, setPrintLayout] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const patientProfile = useRef<PatientProfile>(patientDefaults);
+  const patientProfile = useRef<PatientProfile>(emptyPatientProfile);
   const [notice, setNotice] = useState("");
   const records = useMemo(
     () => (data ? filtered(data.records, from, to) : []),
@@ -1301,14 +1301,10 @@ export function App() {
         setFrom(result.diagnostics.earliest?.slice(0, 10) ?? "");
         setTo(result.diagnostics.latest?.slice(0, 10) ?? "");
         patientProfile.current = {
-          name: patientDefaults.name || result.patient?.name || "",
-          personnummer:
-            patientDefaults.personnummer || result.patient?.identifier || "",
-          dateOfBirth:
-            patientDefaults.dateOfBirth ||
-            formatPatientDate(result.patient?.dateOfBirth) ||
-            "",
-          sex: patientDefaults.sex || result.patient?.sex || "",
+          name: result.patient?.name || "",
+          personnummer: result.patient?.identifier || "",
+          dateOfBirth: formatPatientDate(result.patient?.dateOfBirth) || "",
+          sex: result.patient?.sex || "",
         };
         setNotice("");
       }
