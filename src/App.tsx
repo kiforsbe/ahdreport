@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   Area,
   AreaChart,
@@ -305,13 +306,8 @@ function MetricChart({
         No {labels[metric].toLowerCase()} records in this period.
       </div>
     );
-  return (
-    <ResponsiveContainer
-      key={`${metric}-${printLayout ? "print" : "screen"}`}
-      width="100%"
-      height={210}
-    >
-      <AreaChart data={rows}>
+  const chart = (width?: number, height?: number) => (
+    <AreaChart data={rows} width={width} height={height}>
         <defs>
           <linearGradient id={`fill-${metric}`} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#4263eb" stopOpacity=".32" />
@@ -330,7 +326,13 @@ function MetricChart({
           fill={`url(#fill-${metric})`}
           isAnimationActive={!printLayout}
         />
-      </AreaChart>
+    </AreaChart>
+  );
+  if (printLayout)
+    return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
+  return (
+    <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
+      {chart()}
     </ResponsiveContainer>
   );
 }
@@ -464,6 +466,44 @@ function BloodPressureChart({
       .filter((v): v is number => v !== undefined);
     return values.reduce((a, v) => a + v, 0) / values.length;
   };
+  const chart = (width?: number, height?: number) => (
+    <ComposedChart
+      data={rows}
+      barGap={2}
+      barCategoryGap="28%"
+      width={width}
+      height={height}
+    >
+      <CartesianGrid vertical={false} stroke="#e7eaf0" />
+      <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
+      <YAxis tick={{ fontSize: 11 }} width={45} />
+      <Tooltip content={<BpTooltip />} />
+      <Bar
+        dataKey="sBase"
+        stackId="s"
+        fill="transparent"
+        isAnimationActive={false}
+      />
+      <Bar
+        dataKey="sRange"
+        stackId="s"
+        shape={bpRangeBarShape("#e8590c", "sLow", "sHigh", "sAvg")}
+        isAnimationActive={false}
+      />
+      <Bar
+        dataKey="dBase"
+        stackId="d"
+        fill="transparent"
+        isAnimationActive={false}
+      />
+      <Bar
+        dataKey="dRange"
+        stackId="d"
+        shape={bpRangeBarShape("#4263eb", "dLow", "dHigh", "dAvg")}
+        isAnimationActive={false}
+      />
+    </ComposedChart>
+  );
   return (
     <article className="panel">
       <div
@@ -475,54 +515,33 @@ function BloodPressureChart({
           <b>{format(avg("dAvg"), "mmHg")}</b> diastolic avg.
         </small>
       </div>
-      {(sNote || dNote) && (
+      {!printLayout && (sNote || dNote) && (
         <div className="table-notes">
           {sNote && <small>Systolic — {sNote}</small>}
           {dNote && <small>Diastolic — {dNote}</small>}
         </div>
       )}
-      <ResponsiveContainer
-        key={printLayout ? "blood-pressure-print" : "blood-pressure-screen"}
-        width="100%"
-        height={210}
-      >
-        <ComposedChart data={rows} barGap={2} barCategoryGap="28%">
-          <CartesianGrid vertical={false} stroke="#e7eaf0" />
-          <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
-          <YAxis tick={{ fontSize: 11 }} width={45} />
-          <Tooltip content={<BpTooltip />} />
-          <Bar
-            dataKey="sBase"
-            stackId="s"
-            fill="transparent"
-            isAnimationActive={false}
-          />
-          <Bar
-            dataKey="sRange"
-            stackId="s"
-            shape={bpRangeBarShape("#e8590c", "sLow", "sHigh", "sAvg")}
-            isAnimationActive={false}
-          />
-          <Bar
-            dataKey="dBase"
-            stackId="d"
-            fill="transparent"
-            isAnimationActive={false}
-          />
-          <Bar
-            dataKey="dRange"
-            stackId="d"
-            shape={bpRangeBarShape("#4263eb", "dLow", "dHigh", "dAvg")}
-            isAnimationActive={false}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-      <small style={{ color: "#e8590c" }}>
-        ▮ Systolic (range, avg tick)
-      </small>
-      <small style={{ color: "#4263eb", marginLeft: 14 }}>
-        ▮ Diastolic (range, avg tick)
-      </small>
+      {printLayout ? (
+        <div data-pdf-chart-ready="true">{chart(680, 260)}</div>
+      ) : (
+        <ResponsiveContainer
+          key="blood-pressure-screen"
+          width="100%"
+          height={210}
+        >
+          {chart()}
+        </ResponsiveContainer>
+      )}
+      {!printLayout && (
+        <div className="bp-legend">
+          <small style={{ color: "#e8590c" }}>
+            ▮ Systolic (range, avg tick)
+          </small>
+          <small style={{ color: "#4263eb", marginLeft: 14 }}>
+            ▮ Diastolic (range, avg tick)
+          </small>
+        </div>
+      )}
     </article>
   );
 }
@@ -1233,13 +1252,41 @@ export function App() {
     [data, to],
   );
   useEffect(() => {
-    const prepare = () => setPrintLayout(true);
-    const restore = () => setPrintLayout(false);
-    window.addEventListener("health-atlas:prepare-print", prepare);
-    window.addEventListener("health-atlas:restore-layout", restore);
+    const printWindow = window as Window & {
+      healthAtlasPrintLayout?: (active: boolean) => Promise<void>;
+    };
+    printWindow.healthAtlasPrintLayout = async (active) => {
+      flushSync(() => setPrintLayout(active));
+      await document.fonts?.ready;
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const main = document.querySelector("main");
+      if (Boolean(main?.classList.contains("print-layout")) !== active)
+        throw new Error("The requested PDF layout was not committed.");
+      if (active && main) {
+        const responsiveCharts = main.querySelectorAll(
+          ".recharts-responsive-container",
+        );
+        const printCharts = [
+          ...main.querySelectorAll<HTMLElement>(
+            '[data-pdf-chart-ready="true"]',
+          ),
+        ];
+        const incompleteCharts = printCharts.filter(
+          (chart) => !chart.querySelector(".recharts-surface"),
+        );
+        if (
+          responsiveCharts.length ||
+          !printCharts.length ||
+          incompleteCharts.length
+        )
+          throw new Error("The PDF charts have not finished updating.");
+        printCharts.forEach((chart) => chart.getBoundingClientRect());
+      }
+    };
     return () => {
-      window.removeEventListener("health-atlas:prepare-print", prepare);
-      window.removeEventListener("health-atlas:restore-layout", restore);
+      delete printWindow.healthAtlasPrintLayout;
     };
   }, []);
   async function importData() {
@@ -1284,7 +1331,7 @@ export function App() {
   if (!data)
     return (
       <main className="landing">
-        <div className="brand">ADHREPORT</div>
+        <div className="brand">AHDREPORT</div>
         <div className="hero">
           <p className="eyebrow">PRIVATE HEALTH REPORTING</p>
           <h1>
@@ -1315,7 +1362,7 @@ export function App() {
       <main className={printLayout ? "print-layout" : undefined}>
       <header>
         <div>
-          <div className="brand">ADHREPORT</div>
+          <div className="brand">AHDREPORT</div>
         </div>
         <div className="header-actions">
           <button onClick={() => setData(null)}>Clear session</button>
@@ -1331,6 +1378,9 @@ export function App() {
             <button onClick={() => setFrom(rangeDate(7, to))}>7D</button>
             <button onClick={() => setFrom(rangeDate(30, to))}>30D</button>
             <button onClick={() => setFrom(rangeDate(90, to))}>90D</button>
+            <button onClick={() => setFrom(rangeDate(365, to))}>
+              Last year
+            </button>
             <button
               onClick={() =>
                 setFrom(
@@ -1351,6 +1401,19 @@ export function App() {
         </div>
         <DebouncedDateInput label="From" value={from} onChange={setFrom} />
         <DebouncedDateInput label="To" value={to} onChange={setTo} />
+      </section>
+      <section className="print-period" aria-label="Selected report period">
+        <b>Report period</b>
+        <dl>
+          <div>
+            <dt>From</dt>
+            <dd>{from || "Beginning"}</dd>
+          </div>
+          <div>
+            <dt>To</dt>
+            <dd>{to || "Latest record"}</dd>
+          </div>
+        </dl>
       </section>
       {notice && <div className="notice">{notice}</div>}
       <section className="intro">
@@ -1396,7 +1459,9 @@ export function App() {
                   return (
                     <article className="panel" key={m}>
                       <h3>{labels[m]}</h3>
-                      {note && <small className="table-notes">{note}</small>}
+                      {!printLayout && note && (
+                        <small className="table-notes">{note}</small>
+                      )}
                       <MetricChart metric={m} records={records} />
                     </article>
                   );

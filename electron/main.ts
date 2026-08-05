@@ -66,7 +66,7 @@ ipcMain.handle(
     if (!mainWindow) return { canceled: true };
     const target = await dialog.showSaveDialog(mainWindow, {
       title: "Save health report",
-      defaultPath: "adhreport.pdf",
+      defaultPath: "ahdreport.pdf",
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     if (target.canceled || !target.filePath) return { canceled: true };
@@ -89,13 +89,14 @@ ipcMain.handle(
     });
     const bandStyle =
       "font-size:8px;width:100%;padding:0 12mm;display:flex;justify-content:space-between;color:#667085;font-family:sans-serif;-webkit-print-color-adjust:economy;";
-    const headerTemplate = `<div style="${bandStyle}"><span>${patientSummary.length ? escapeHtml(patientSummary.join(" · ")) : "ADHReport"}</span><span>Printed: ${escapeHtml(printedOn)}</span></div>`;
+    const headerTemplate = `<div style="${bandStyle}"><span>${patientSummary.length ? escapeHtml(patientSummary.join(" · ")) : "AHDReport"}</span><span>Printed: ${escapeHtml(printedOn)}</span></div>`;
     const footerTemplate = `<div style="${bandStyle}"><span></span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
     try {
       await mainWindow.webContents.executeJavaScript(
-        'window.dispatchEvent(new Event("health-atlas:prepare-print"));',
+        '(async () => { if (!window.healthAtlasPrintLayout) throw new Error("Print layout bridge is unavailable"); await window.healthAtlasPrintLayout(true); return true; })()',
       );
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      mainWindow.webContents.invalidate();
+      await mainWindow.webContents.capturePage();
       const pdf = await mainWindow.webContents.printToPDF({
         printBackground: false,
         pageSize: "A4",
@@ -108,7 +109,7 @@ ipcMain.handle(
     } finally {
       await mainWindow.webContents
         .executeJavaScript(
-          'window.dispatchEvent(new Event("health-atlas:restore-layout"));',
+          '(async () => { await window.healthAtlasPrintLayout?.(false); return true; })()',
         )
         .catch(() => undefined);
       mainWindow.setBackgroundColor(originalBackground);

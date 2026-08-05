@@ -3,3 +3,8 @@ dist
 dist-electron
 *.log
 .env
+
+# Local Apple Health exports may contain sensitive health data.
+export.xml
+export_cda.xml
+apple_health_export/

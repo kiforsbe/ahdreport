@@ -129,20 +129,23 @@ header span {
 }
 .controls input {
   display: block;
-  height: 53px;
-  margin-top: 11px;
+  margin-top: 14px;
   border: 1px solid #d8deea;
   padding: 8px;
   border-radius: 7px;
   background: white;
 }
 .controls .presets button {
-  min-height: 53px;
+  min-height: 0;
+  padding: 8px 13px;
 }
 .controls input:focus {
   border-color: #4263eb;
   outline: 2px solid #dce5ff;
   outline-offset: 1px;
+}
+.print-period {
+  display: none;
 }
 .intro {
   padding: 46px 0 22px;
@@ -241,6 +244,10 @@ header span {
 }
 .print-layout .grid {
   grid-template-columns: 1fr;
+}
+main.print-layout {
+  max-width: 718px;
+  width: 718px;
 }
 .panel {
   padding: 18px;
@@ -350,6 +357,30 @@ td:nth-child(2) {
   .notice {
     display: none;
   }
+  .print-period {
+    align-items: flex-start;
+    border-bottom: 1px solid #e2e7ef;
+    display: flex;
+    gap: 28px;
+    padding: 14px 0;
+  }
+  .print-period > b {
+    font-size: 14px;
+  }
+  .print-period dl {
+    display: flex;
+    gap: 32px;
+    margin: 0;
+  }
+  .print-period dt {
+    color: #667085;
+    font-size: 11px;
+  }
+  .print-period dd {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    margin: 3px 0 0;
+  }
   .intro {
     padding: 20px 0;
   }
@@ -396,10 +427,9 @@ td:nth-child(2) {
   .panel {
     break-inside: avoid;
   }
-  .panel .recharts-responsive-container,
-  .panel .recharts-wrapper,
-  .panel .recharts-surface {
-    width: 100% !important;
+  .dashboard .table-notes,
+  .dashboard .bp-legend {
+    display: none !important;
   }
   .print-report {
     margin-top: 22px;
