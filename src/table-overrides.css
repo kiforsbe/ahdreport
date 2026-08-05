@@ -14,3 +14,19 @@ th:not(:first-child),
 td:not(:first-child) {
   width: auto;
 }
+
+/* Only tables whose data cells are plain numeric text (no chart/SVG content) get right-aligned values. */
+table.numeric th:not(:first-child),
+table.numeric td:not(:first-child) {
+  text-align: right;
+}
+
+.table-notes {
+  display: block;
+  margin: 2px 0 10px;
+}
+
+.table-notes small {
+  display: block;
+  margin: 2px 0;
+}
