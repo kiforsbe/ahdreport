@@ -298,6 +298,8 @@ function MetricChart({
   metric: Metric;
   records: HealthData["records"];
 }) {
+  if (metric === "heartRate" || walkingMetrics.includes(metric))
+    return <RangeMetricChart metric={metric} records={records} />;
   const printLayout = useContext(PrintLayoutContext);
   const rows = daily(records, metric);
   if (!rows.length)
@@ -327,6 +329,85 @@ function MetricChart({
           isAnimationActive={!printLayout}
         />
     </AreaChart>
+  );
+  if (printLayout)
+    return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
+  return (
+    <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
+      {chart()}
+    </ResponsiveContainer>
+  );
+}
+function RangeMetricTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  const range =
+    row.low === row.high
+      ? format(row.average, row.unit)
+      : `${format(row.low, row.unit)}–${format(row.high, row.unit)} (avg ${format(row.average, row.unit)})`;
+  return (
+    <div
+      style={{
+        background: "white",
+        border: "1px solid #e4e8ef",
+        borderRadius: 8,
+        padding: "8px 11px",
+        fontSize: 12,
+      }}
+    >
+      <b>{new Date(`${label}T00:00:00`).toLocaleDateString()}</b>
+      <div style={{ color: row.color, marginTop: 4 }}>
+        {row.label}: {range}
+      </div>
+    </div>
+  );
+}
+function RangeMetricChart({
+  metric,
+  records,
+}: {
+  metric: Metric;
+  records: HealthData["records"];
+}) {
+  const printLayout = useContext(PrintLayoutContext);
+  const color = colorsByMetric[metric];
+  const rows = dailyStats(records, metric).map((day) => ({
+    date: day.date,
+    unit: day.unit,
+    label: labels[metric],
+    color,
+    low: day.min,
+    high: day.max,
+    average: day.average,
+    base: day.min,
+    range: day.max - day.min,
+  }));
+  if (!rows.length)
+    return (
+      <div className="empty small">
+        No {labels[metric].toLowerCase()} records in this period.
+      </div>
+    );
+  const chart = (width?: number, height?: number) => (
+    <ComposedChart
+      data={rows}
+      barCategoryGap="28%"
+      width={width}
+      height={height}
+    >
+      <CartesianGrid vertical={false} stroke="#e7eaf0" />
+      <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
+      <YAxis tick={{ fontSize: 11 }} width={45} />
+      <Tooltip content={<RangeMetricTooltip />} />
+      <Bar dataKey="base" stackId={metric} fill="transparent" isAnimationActive={false} />
+      <Bar
+        dataKey="range"
+        stackId={metric}
+        shape={bpRangeBarShape(color, "low", "high", "average")}
+        isAnimationActive={false}
+      />
+    </ComposedChart>
   );
   if (printLayout)
     return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
