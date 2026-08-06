@@ -14,6 +14,7 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -389,6 +390,8 @@ function RangeMetricChart({
         No {labels[metric].toLowerCase()} records in this period.
       </div>
     );
+  const overallAverage =
+    rows.reduce((total, row) => total + row.average, 0) / rows.length;
   const chart = (width?: number, height?: number) => (
     <ComposedChart
       data={rows}
@@ -400,6 +403,12 @@ function RangeMetricChart({
       <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
       <YAxis tick={{ fontSize: 11 }} width={45} />
       <Tooltip content={<RangeMetricTooltip />} />
+      <ReferenceLine
+        y={overallAverage}
+        stroke={color}
+        strokeDasharray="4 4"
+        strokeOpacity={0.7}
+      />
       <Bar dataKey="base" stackId={metric} fill="transparent" isAnimationActive={false} />
       <Bar
         dataKey="range"
@@ -410,11 +419,23 @@ function RangeMetricChart({
     </ComposedChart>
   );
   if (printLayout)
-    return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
+    return (
+      <div data-pdf-chart-ready="true">
+        {chart(680, 260)}
+        <small style={{ color }}>
+          ▮ Daily range (avg tick) · ┄ Overall average {format(overallAverage, rows[0].unit)}
+        </small>
+      </div>
+    );
   return (
-    <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
-      {chart()}
-    </ResponsiveContainer>
+    <>
+      <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
+        {chart()}
+      </ResponsiveContainer>
+      <small style={{ color }}>
+        ▮ Daily range (avg tick) · ┄ Overall average {format(overallAverage, rows[0].unit)}
+      </small>
+    </>
   );
 }
 function bpRangeBarShape(
