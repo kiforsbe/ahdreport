@@ -20,6 +20,7 @@ flowchart LR
         Window["BrowserWindow lifecycle"]
         ImportIPC["health:import handler"]
         PdfIPC["health:exportPdf handler"]
+        DataIPC["health:exportData handler"]
         Parser["Apple Health parser"]
         Dialogs["Native open/save dialogs"]
         Files["Local filesystem"]
@@ -40,12 +41,14 @@ flowchart LR
     App --> Bridge
     Bridge -->|ipcRenderer.invoke| ImportIPC
     Bridge -->|ipcRenderer.invoke| PdfIPC
+    Bridge -->|ipcRenderer.invoke| DataIPC
     ImportIPC --> Dialogs --> Files
     ImportIPC --> Parser
     Parser -->|HealthData| ImportIPC
     PdfIPC --> Dialogs
     PdfIPC -->|prepare and restore| PrintState
     PdfIPC -->|printToPDF and writeFile| Files
+    DataIPC -->|writeFile| Files
     Window --> App
 ```
 
@@ -54,8 +57,11 @@ and `sandbox: true`. It cannot use Node.js or the filesystem directly. The prelo
 script exposes two operations through `window.healthAPI`:
 
 - `importExport()` opens a native file chooser and returns `HealthData | null`.
-- `exportPdf(patientName, personnummer, dateOfBirth, sex)` opens a save dialog and
-  returns `{ canceled, path? }`.
+- `exportPdf(patientName, personnummer, dateOfBirth, sex, rasterizeCharts?)` opens a
+  save dialog and returns `{ canceled, path? }`. The optional flag selects compact
+  raster-chart PDF output.
+- `exportData(format, content)` opens a save dialog and writes renderer-generated CSV
+  or XLSX content, returning `{ canceled, path? }`.
 
 The IPC surface does not accept arbitrary input or output paths; the main process owns
 both native dialogs.
@@ -64,13 +70,13 @@ both native dialogs.
 
 | Runtime/layer | File | Responsibility |
 |---|---|---|
-| Electron main | `electron/main.ts` | Window lifecycle, native dialogs, IPC handlers, patient PDF header, synchronized PDF capture, filesystem writes |
+| Electron main | `electron/main.ts` | Window lifecycle, native dialogs, import/PDF/data-export IPC handlers, patient PDF header, synchronized PDF capture, filesystem writes |
 | Electron main | `electron/appleHealthParser.ts` | ZIP discovery, HealthKit XML parsing, CDA patient extraction, metric mapping, validation, deduplication, diagnostics |
 | Electron main | `electron/patientDefaults.ts` | Runtime patient defaults files, environment mapping, source precedence, and CDA/default merging |
 | Preload | `electron/preload.cts` | Narrow `contextBridge` adapter between renderer calls and IPC channels |
 | Shared contract | `src/shared/types.ts` | Metrics and IPC data types compiled for both Electron and renderer targets |
 | Renderer entry | `src/main.tsx` | React root and stylesheet loading |
-| Renderer | `src/App.tsx` | Session state, patient editor, overview cards, charts, detailed tables, and print-layout readiness protocol |
+| Renderer | `src/App.tsx` | Session state, patient editor, overview cards, charts, detailed tables, CSV/XLSX serialization, and print-layout readiness protocol |
 | Renderer model | `src/report.ts` | Pure filtering, formatting, daily aggregation, medians, deltas, and metric metadata |
 | Styling | `src/styles.css` | Application, responsive, card, chart, and print presentation |
 | Styling | `src/table-overrides.css` | Detailed-report table width overrides |
@@ -279,10 +285,13 @@ displayed minimum and maximum.
 
 ## 8. Visualization and detailed report composition
 
-Dashboard groups are Vitals, Sleep & activity, and Mobility. Standard metric trends use
-Recharts area charts. Blood pressure uses a composed chart with systolic and diastolic
-daily ranges plus an average tick; the UI does not describe these series as "upper" or
-"lower".
+Dashboard groups are Vitals, Sleep & activity, and Mobility. Most standard metric
+trends use Recharts area charts. Blood pressure uses a composed chart with systolic and
+diastolic daily ranges plus an average tick; the UI does not describe these series as
+"upper" or "lower". Heart rate, walking speed, step length, walking asymmetry, and
+double support use the same daily min–max range bars with an average tick. These range
+charts also include a dashed overall-average reference line and a legend explaining the
+daily range, tick, and benchmark.
 
 The detailed section is part of the same React document and is available in both viewer
 and PDF modes. It contains specialized tables:
@@ -294,15 +303,33 @@ and PDF modes. It contains specialized tables:
 
 `DailyDistribution` is a custom SVG showing daily min/max, average, standard deviation,
 and shared column bounds. `DayTrace` shows intra-day shape. Distribution bounds also use
-Tukey fences to prevent a rare bad reading from flattening every other row. Each report
-section is limited to the 365 most recent days and emits explicit truncation or coverage
-notes when the selected period and available data differ.
+Tukey fences to prevent a rare bad reading from flattening every other row. Viewer
+tables are limited to the 365 most recent days; PDF tables use the 90 most recent days
+to reduce PDF size. Each report section emits explicit truncation or coverage notes when
+the selected period and available data differ.
 
-## 9. PDF export protocol
+## 9. Export protocols
+
+### 9.1 Data export
+
+The split export control keeps **Export PDF** as its primary action and uses a native
+`<details>` disclosure menu for compact PDF, CSV, and Excel options. The disclosure is
+not React state, so opening it does not rerender the potentially large dashboard and
+detailed tables.
+
+CSV and XLSX exports contain records in the selected report period, newest first, with
+date, display metric name, value, unit, source, and category columns. CSV includes a
+UTF-8 BOM for spreadsheet compatibility and quotes spreadsheet-sensitive values. XLSX
+is assembled in the renderer as a minimal Open XML workbook with JSZip, which is loaded
+only when Excel export is requested. The content is passed through the narrow preload
+bridge; the main process still owns the destination chooser and write.
+
+### 9.2 PDF export protocol
 
 PDF export requires a separate layout pass because a chart measured in the 1440px
 viewer cannot be safely scaled into an A4 card. The renderer therefore exposes an
-internal `window.healthAtlasPrintLayout(active)` promise for the main process to call.
+internal `window.healthAtlasPrintLayout(active, rasterizeCharts?)` promise for the main
+process to call.
 This is not part of the preload API and is only used by AHDReport's own main process.
 
 ```mermaid
@@ -314,17 +341,20 @@ sequenceDiagram
     participant DOM as React / Chromium
     participant FS as Filesystem
 
-    User->>UI: Export detailed PDF
-    UI->>Bridge: exportPdf(current patient fields)
+    User->>UI: Export PDF or compact PDF
+    UI->>Bridge: exportPdf(current patient fields, rasterizeCharts?)
     Bridge->>Main: invoke health:exportPdf
     Main->>User: Native save dialog
     alt canceled
         Main-->>UI: canceled
     else selected
-        Main->>DOM: await healthAtlasPrintLayout(true)
+        Main->>DOM: await healthAtlasPrintLayout(true, rasterizeCharts)
         DOM->>DOM: flushSync print state
         DOM->>DOM: await fonts and two animation frames
         DOM->>DOM: verify print-chart readiness markers
+        opt compact PDF
+            DOM->>DOM: rasterize chart SVGs as 2× JPEGs
+        end
         DOM-->>Main: print layout ready
         Main->>DOM: invalidate and await capturePage compositor fence
         Main->>DOM: printToPDF(A4, header/footer)
@@ -344,6 +374,11 @@ In print layout:
 - actions, date inputs, notices, chart coverage notes, and the pressure legend are hidden;
 - the selected From/To range and patient details are rendered as plain text;
 - the main process adds a patient summary header, printed date, and page numbering.
+
+The standard PDF preserves chart vectors. Compact PDF mode serializes each ready chart
+SVG, draws it to a white 2× canvas, waits for the JPEG (quality 0.88) to decode, and
+replaces the SVG in the print DOM before capture. This trades vector scalability for
+smaller chart payloads while retaining print-quality chart resolution.
 
 The renderer uses `flushSync`, font readiness, animation frames, and structural chart
 checks before resolving the preparation promise. The main process then waits for a
@@ -395,6 +430,7 @@ hardening for very large or adversarial inputs.
 - Patient demographics are editable, but health measurements are read-only.
 - Medication is reported only when supported records exist; there is no manual
   medication entry workflow.
-- Detailed tables are capped at 365 days per section to bound report size.
+- Detailed viewer tables are capped at 365 days per section; PDF tables are capped at
+  90 days per section to bound report size.
 - The renderer is intentionally concentrated in `App.tsx`; splitting it into feature
   modules may become useful as the UI and automated component-test surface grow.

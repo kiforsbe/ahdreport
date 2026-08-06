@@ -21,8 +21,11 @@ records, patient details, or generated reports to a server.
 - Last-30-days overview cards for weight, heart rate, steps, and sleep.
 - Collapsible last-year and all-time overview cards.
 - Trend charts for vitals, sleep, activity, and mobility.
-- Daily blood-pressure ranges with systolic and diastolic averages.
+- Daily min–max range charts with average ticks for blood pressure, heart rate, and
+  core walking metrics, plus overall-average guides.
 - Detailed daily tables with min/max, average, standard deviation, and intra-day traces.
+- Standard vector PDF and compact raster-chart PDF exports, plus CSV and Excel exports
+  for the selected report period.
 - A synchronized A4 PDF containing patient details, selected period, charts, tables,
   page numbers, and a patient summary header.
 - No account, cloud service, database, analytics, or telemetry.
@@ -40,7 +43,8 @@ data in the current application session and does not intentionally send it anywh
 
 - Clearing the session or closing the application removes imported data from the app.
 - The original Apple Health export remains wherever you stored it.
-- An exported PDF is a new persistent file; protect and delete it as appropriate.
+- Exported PDFs, CSVs, and Excel workbooks are new persistent files; protect and delete
+  them as appropriate.
 - Local `.env` values can contain patient data and must not be committed or shared.
 - Patient defaults are loaded at import time by the Electron main process and are not
   compiled into the Vite renderer bundle.
@@ -182,14 +186,20 @@ Do not distribute a patient defaults file with the application. Although values 
 longer compiled into the renderer bundle, the file itself contains readable personal
 data.
 
-## Export a PDF
+## Export reports and data
 
 1. Select the desired report period.
 2. Confirm the patient details.
-3. Select **Export PDF** for vector charts. Use its adjacent menu for compact
-   PDF, CSV, or Excel exports. Compact PDF rasterizes charts at high resolution
-   with JPEG compression for a smaller file.
+3. Select **Export PDF** for vector charts. Use its adjacent menu for **Export compact
+   PDF**, **Export CSV**, or **Export Excel (.xlsx)**.
 4. Choose a destination in the native save dialog.
+
+Compact PDF rasterizes charts only, at 2× resolution with high-quality JPEG
+compression. This can reduce PDF size while keeping charts clear in print; the exact
+saving depends on the selected data and report length.
+
+CSV and Excel exports contain the selected report-period records, newest first, with
+date, metric, value, unit, source, and category columns.
 
 The PDF includes:
 
@@ -282,7 +292,8 @@ and retry. The app restores viewer mode after a failed export.
 - Imports are limited to Apple Health XML/ZIP exports.
 - The primary HealthKit XML is parsed in memory rather than as a stream.
 - Health measurements are read-only.
-- Detailed report sections are capped at 365 days.
+- Detailed viewer sections are capped at 365 days; PDF sections are capped at 90 days
+  to keep exported files compact.
 - The app is not a medical device and does not interpret clinical significance.
 
 ## Developer guide
@@ -317,7 +328,7 @@ Electron main process
   ├─ native file dialogs
   ├─ local file reads/writes
   ├─ Apple Health parsing
-  └─ PDF generation
+  └─ PDF, CSV, and Excel export writes
           │
           │ typed IPC through preload
           ▼
