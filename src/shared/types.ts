@@ -55,6 +55,10 @@ export interface HealthAPI {
     sex?: string,
     rasterizeCharts?: boolean,
   ): Promise<{ path?: string; canceled: boolean }>;
+  exportData(
+    format: "csv" | "xlsx",
+    content: string,
+  ): Promise<{ path?: string; canceled: boolean }>;
 }
 
 declare global {

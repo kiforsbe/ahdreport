@@ -186,8 +186,9 @@ data.
 
 1. Select the desired report period.
 2. Confirm the patient details.
-3. Select **Export detailed PDF** for vector charts, or **Export compact PDF**
-   to rasterize charts at high resolution with JPEG compression for a smaller file.
+3. Select **Export PDF** for vector charts. Use its adjacent menu for compact
+   PDF, CSV, or Excel exports. Compact PDF rasterizes charts at high resolution
+   with JPEG compression for a smaller file.
 4. Choose a destination in the native save dialog.
 
 The PDF includes:

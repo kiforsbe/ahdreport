@@ -61,6 +61,27 @@ ipcMain.handle("health:import", async () => {
     },
   };
 });
+ipcMain.handle(
+  "health:exportData",
+  async (_event, format: "csv" | "xlsx", content: string) => {
+    if (!mainWindow) return { canceled: true };
+    const isExcel = format === "xlsx";
+    const target = await dialog.showSaveDialog(mainWindow, {
+      title: `Save ${isExcel ? "Excel" : "CSV"} export`,
+      defaultPath: `ahdreport-data.${format}`,
+      filters: [
+        {
+          name: isExcel ? "Excel workbook" : "CSV",
+          extensions: [format],
+        },
+      ],
+    });
+    if (target.canceled || !target.filePath) return { canceled: true };
+    const data = isExcel ? Buffer.from(content, "base64") : content;
+    await (await import("node:fs/promises")).writeFile(target.filePath, data);
+    return { canceled: false, path: target.filePath };
+  },
+);
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")

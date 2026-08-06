@@ -109,6 +109,56 @@ header span {
   display: flex;
   gap: 8px;
 }
+.export-split {
+  display: flex;
+  position: relative;
+}
+.export-split .primary {
+  border-radius: 8px 0 0 8px;
+}
+.export-options > summary {
+  background: #4263eb;
+  border: 1px solid #4263eb;
+  border-color: #4263eb;
+  border-left-color: rgba(255, 255, 255, 0.45);
+  border-radius: 0 8px 8px 0;
+  color: white;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-weight: 700;
+  list-style: none;
+  padding: 11px 10px;
+}
+.export-options > summary::-webkit-details-marker {
+  display: none;
+}
+.export-options > summary:hover {
+  border-color: #4263eb;
+  background: #364fc7;
+}
+.export-menu {
+  background: white;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(32, 47, 72, 0.16);
+  min-width: 205px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+}
+.export-menu button {
+  border: 0;
+  border-radius: 5px;
+  display: block;
+  text-align: left;
+  width: 100%;
+}
+.export-menu button:hover {
+  background: #eef2ff;
+}
 .controls {
   display: flex;
   gap: 22px;

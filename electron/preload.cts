@@ -17,4 +17,6 @@ contextBridge.exposeInMainWorld("healthAPI", {
       sex,
       rasterizeCharts,
     ),
+  exportData: (format: "csv" | "xlsx", content: string) =>
+    ipcRenderer.invoke("health:exportData", format, content),
 });
