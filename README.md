@@ -186,7 +186,8 @@ data.
 
 1. Select the desired report period.
 2. Confirm the patient details.
-3. Select **Export detailed PDF**.
+3. Select **Export detailed PDF** for vector charts, or **Export compact PDF**
+   to rasterize charts at high resolution with JPEG compression for a smaller file.
 4. Choose a destination in the native save dialog.
 
 The PDF includes:
@@ -199,8 +200,10 @@ The PDF includes:
 - detailed daily measurement tables;
 - coverage and truncation information where applicable.
 
-Detailed sections show at most the 365 most recent days with data per section. AHDReport
-adds a note when more data exists or a metric covers less than the selected period.
+Interactive detailed sections show at most the 365 most recent days with data per
+section. To keep exported PDFs compact, PDFs include the 90 most recent days per
+section. AHDReport adds a note when more data exists or a metric covers less than the
+selected period.
 
 PDF generation temporarily switches the renderer to a fixed A4-safe chart layout and
 waits for the charts to finish rendering before capture. The interactive layout is

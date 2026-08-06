@@ -53,6 +53,7 @@ export interface HealthAPI {
     personnummer?: string,
     dateOfBirth?: string,
     sex?: string,
+    rasterizeCharts?: boolean,
   ): Promise<{ path?: string; canceled: boolean }>;
 }
 

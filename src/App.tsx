@@ -52,6 +52,7 @@ const activityMetrics: Metric[] = [
   "sleep",
 ];
 const MAX_TABLE_ROWS = 365;
+const MAX_PDF_TABLE_ROWS = 365;
 const PrintLayoutContext = createContext(false);
 type PatientProfile = {
   name: string;
@@ -987,8 +988,12 @@ function ReportTable({
   from: string;
   to: string;
 }) {
+  const printLayout = useContext(PrintLayoutContext);
   const allDays = dailyStats(records, metric);
-  const days = allDays.slice(0, MAX_TABLE_ROWS);
+  const days = allDays.slice(
+    0,
+    printLayout ? MAX_PDF_TABLE_ROWS : MAX_TABLE_ROWS,
+  );
   if (!days.length) return null;
   const bounds = columnBounds(days);
   const unit = days[0].unit;
@@ -1050,6 +1055,7 @@ function VitalsReportTable({
   from: string;
   to: string;
 }) {
+  const printLayout = useContext(PrintLayoutContext);
   const systolic = new Map(
     dailyStats(records, "bloodPressureSystolic").map((day) => [day.date, day]),
   );
@@ -1070,7 +1076,10 @@ function VitalsReportTable({
       ...weight.keys(),
     ]),
   ].sort((a, b) => b.localeCompare(a));
-  const dates = allDates.slice(0, MAX_TABLE_ROWS);
+  const dates = allDates.slice(
+    0,
+    printLayout ? MAX_PDF_TABLE_ROWS : MAX_TABLE_ROWS,
+  );
   if (!dates.length) return null;
   const diastolicBounds = columnBounds(
     dates.map((date) => diastolic.get(date)),
@@ -1166,6 +1175,7 @@ function WalkingReportTable({
   from: string;
   to: string;
 }) {
+  const printLayout = useContext(PrintLayoutContext);
   const byMetric = new Map(
     walkingMetrics.map((metric) => [
       metric,
@@ -1177,7 +1187,10 @@ function WalkingReportTable({
       walkingMetrics.flatMap((metric) => [...byMetric.get(metric)!.keys()]),
     ),
   ].sort((a, b) => b.localeCompare(a));
-  const dates = allDates.slice(0, MAX_TABLE_ROWS);
+  const dates = allDates.slice(
+    0,
+    printLayout ? MAX_PDF_TABLE_ROWS : MAX_TABLE_ROWS,
+  );
   if (!dates.length) return null;
   const boundsByMetric = new Map(
     walkingMetrics.map((metric) => [
@@ -1253,6 +1266,7 @@ function ActivityReportTable({
   from: string;
   to: string;
 }) {
+  const printLayout = useContext(PrintLayoutContext);
   const totalsByMetric = new Map(
     activityMetrics.map((metric) => [
       metric,
@@ -1266,7 +1280,10 @@ function ActivityReportTable({
       ]),
     ),
   ].sort((a, b) => b.localeCompare(a));
-  const dates = allDates.slice(0, MAX_TABLE_ROWS);
+  const dates = allDates.slice(
+    0,
+    printLayout ? MAX_PDF_TABLE_ROWS : MAX_TABLE_ROWS,
+  );
   if (!dates.length) return null;
   const boundsByMetric = new Map(
     activityMetrics.map((metric) => [
@@ -1355,9 +1372,12 @@ export function App() {
   );
   useEffect(() => {
     const printWindow = window as Window & {
-      healthAtlasPrintLayout?: (active: boolean) => Promise<void>;
+      healthAtlasPrintLayout?: (
+        active: boolean,
+        rasterizeCharts?: boolean,
+      ) => Promise<void>;
     };
-    printWindow.healthAtlasPrintLayout = async (active) => {
+    printWindow.healthAtlasPrintLayout = async (active, rasterizeCharts = false) => {
       flushSync(() => setPrintLayout(active));
       await document.fonts?.ready;
       await new Promise<void>((resolve) =>
@@ -1385,6 +1405,52 @@ export function App() {
         )
           throw new Error("The PDF charts have not finished updating.");
         printCharts.forEach((chart) => chart.getBoundingClientRect());
+        if (rasterizeCharts) {
+          await Promise.all(
+            printCharts.map(async (chart) => {
+              const svg = chart.querySelector<SVGSVGElement>(
+                "svg.recharts-surface",
+              );
+              if (!svg) throw new Error("A PDF chart could not be rasterized.");
+              const { width, height } = svg.getBoundingClientRect();
+              const serialized = new XMLSerializer().serializeToString(svg);
+              const markup = serialized.includes("xmlns=")
+                ? serialized
+                : serialized.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+              const source = URL.createObjectURL(
+                new Blob([markup], { type: "image/svg+xml" }),
+              );
+              try {
+                const image = await new Promise<HTMLImageElement>(
+                  (resolve, reject) => {
+                    const loaded = new Image();
+                    loaded.onload = () => resolve(loaded);
+                    loaded.onerror = () => reject(new Error("A PDF chart image could not be created."));
+                    loaded.src = source;
+                  },
+                );
+                const scale = 2;
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.round(width * scale);
+                canvas.height = Math.round(height * scale);
+                const context = canvas.getContext("2d");
+                if (!context) throw new Error("A PDF chart image could not be created.");
+                context.fillStyle = "white";
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                const raster = document.createElement("img");
+                raster.src = canvas.toDataURL("image/jpeg", 0.88);
+                await raster.decode();
+                raster.width = Math.round(width);
+                raster.height = Math.round(height);
+                raster.style.display = "block";
+                svg.replaceWith(raster);
+              } finally {
+                URL.revokeObjectURL(source);
+              }
+            }),
+          );
+        }
       }
     };
     return () => {
@@ -1416,15 +1482,17 @@ export function App() {
       );
     }
   }
-  async function pdf() {
+  async function pdf(rasterizeCharts = false) {
     const patient = patientProfile.current;
     const result = await window.healthAPI.exportPdf(
       patient.name,
       patient.personnummer,
       patient.dateOfBirth,
       patient.sex,
+      rasterizeCharts,
     );
-    if (!result.canceled) setNotice(`PDF saved to ${result.path}`);
+    if (!result.canceled)
+      setNotice(`${rasterizeCharts ? "Compact " : ""}PDF saved to ${result.path}`);
   }
   if (!data)
     return (
@@ -1455,6 +1523,7 @@ export function App() {
     );
   const medicationPresent = records.some((r) => r.metric === "medication");
   const hasBloodPressure = records.some((r) => bpMetrics.includes(r.metric));
+  const tableRowLimit = printLayout ? MAX_PDF_TABLE_ROWS : MAX_TABLE_ROWS;
   return (
     <PrintLayoutContext.Provider value={printLayout}>
       <main className={printLayout ? "print-layout" : undefined}>
@@ -1464,8 +1533,11 @@ export function App() {
         </div>
         <div className="header-actions">
           <button onClick={() => setData(null)}>Clear session</button>
-          <button className="primary" onClick={pdf}>
+          <button className="primary" onClick={() => pdf()}>
             Export detailed PDF
+          </button>
+          <button onClick={() => pdf(true)}>
+            Export compact PDF
           </button>
         </div>
       </header>
@@ -1601,7 +1673,7 @@ export function App() {
         <h2>Detailed measurements</h2>
         <p>
           Report period: {from || "Beginning"} — {to}. Each table below lists up
-          to {MAX_TABLE_ROWS.toLocaleString()} of the most recent days with data
+          to {tableRowLimit.toLocaleString()} of the most recent days with data
           per metric; a note appears under any table showing fewer days than are
           available, or where a metric's own data starts later or ends earlier
           than the selected period.

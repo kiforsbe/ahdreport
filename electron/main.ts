@@ -80,11 +80,12 @@ ipcMain.handle(
     personnummer?: string,
     dateOfBirth?: string,
     sex?: string,
+    rasterizeCharts = false,
   ) => {
     if (!mainWindow) return { canceled: true };
     const target = await dialog.showSaveDialog(mainWindow, {
       title: "Save health report",
-      defaultPath: "ahdreport.pdf",
+      defaultPath: rasterizeCharts ? "ahdreport-compact.pdf" : "ahdreport.pdf",
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     if (target.canceled || !target.filePath) return { canceled: true };
@@ -111,7 +112,7 @@ ipcMain.handle(
     const footerTemplate = `<div style="${bandStyle}"><span></span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
     try {
       await mainWindow.webContents.executeJavaScript(
-        '(async () => { if (!window.healthAtlasPrintLayout) throw new Error("Print layout bridge is unavailable"); await window.healthAtlasPrintLayout(true); return true; })()',
+        `(async () => { if (!window.healthAtlasPrintLayout) throw new Error("Print layout bridge is unavailable"); await window.healthAtlasPrintLayout(true, ${rasterizeCharts}); return true; })()`,
       );
       mainWindow.webContents.invalidate();
       await mainWindow.webContents.capturePage();

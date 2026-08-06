@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("healthAPI", {
     personnummer?: string,
     dateOfBirth?: string,
     sex?: string,
+    rasterizeCharts = false,
   ) =>
     ipcRenderer.invoke(
       "health:exportPdf",
@@ -14,5 +15,6 @@ contextBridge.exposeInMainWorld("healthAPI", {
       personnummer,
       dateOfBirth,
       sex,
+      rasterizeCharts,
     ),
 });
