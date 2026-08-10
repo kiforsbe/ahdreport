@@ -3,13 +3,14 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { HealthData } from "../../shared/types";
-import { colorsByMetric, daily, format } from "../../report";
+import { colorsByMetric, daily, format, plateaus } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 
 function CarbsTooltip({ active, payload, label }: any) {
@@ -59,8 +60,14 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         No carbohydrate records in this period.
       </div>
     );
+  const plateauRows = plateaus(records, "carbs", "total");
+  const plateauByDate = new Map(plateauRows.map((row) => [row.date, row.value]));
+  const chartRows = rows.map((row) => ({
+    ...row,
+    plateau: plateauByDate.get(row.date),
+  }));
   const chart = (width?: number, height?: number) => (
-    <AreaChart data={rows} width={width} height={height}>
+    <AreaChart data={chartRows} width={width} height={height}>
       <defs>
         <linearGradient id="fill-carbs-other" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor={colorsByMetric.carbs} stopOpacity=".32" />
@@ -93,6 +100,16 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         fill="url(#fill-carbs-other)"
         isAnimationActive={!printLayout}
       />
+      {plateauRows.length > 0 && (
+        <Line
+          type="stepAfter"
+          dataKey="plateau"
+          stroke={colorsByMetric.carbs}
+          strokeWidth={2.5}
+          dot={false}
+          isAnimationActive={!printLayout}
+        />
+      )}
     </AreaChart>
   );
   return (

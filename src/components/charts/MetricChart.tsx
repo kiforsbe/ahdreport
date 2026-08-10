@@ -3,6 +3,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,6 +15,8 @@ import {
   daily,
   format,
   labels,
+  plateauMetrics,
+  plateaus,
   totalsMetrics,
   walkingMetrics,
 } from "../../report";
@@ -47,8 +50,16 @@ export function MetricChart({
     );
   const values = rows.map((row) => row.value);
   const axisMin = niceAxisMin(Math.min(...values), Math.max(...values));
+  const plateauRows = plateauMetrics.includes(metric)
+    ? plateaus(records, metric, totalsMetrics.includes(metric) ? "total" : "average")
+    : [];
+  const plateauByDate = new Map(plateauRows.map((row) => [row.date, row.value]));
+  const chartRows = rows.map((row) => ({
+    ...row,
+    plateau: plateauByDate.get(row.date),
+  }));
   const chart = (width?: number, height?: number) => (
-    <AreaChart data={rows} width={width} height={height}>
+    <AreaChart data={chartRows} width={width} height={height}>
         <defs>
           <linearGradient id={`fill-${metric}`} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity=".32" />
@@ -67,6 +78,16 @@ export function MetricChart({
           fill={`url(#fill-${metric})`}
           isAnimationActive={!printLayout}
         />
+        {plateauRows.length > 0 && (
+          <Line
+            type="stepAfter"
+            dataKey="plateau"
+            stroke={color}
+            strokeWidth={2.5}
+            dot={false}
+            isAnimationActive={!printLayout}
+          />
+        )}
     </AreaChart>
   );
   if (printLayout)

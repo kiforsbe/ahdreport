@@ -497,6 +497,17 @@ export const totalsMetrics: Metric[] = [
   "activeEnergy",
   ...nutritionMetrics,
 ];
+export const plateauMetrics: Metric[] = [
+  "steps",
+  "activeEnergy",
+  "distance",
+  "exerciseTime",
+  "dietaryEnergy",
+  "fiber",
+  "protein",
+  "fat",
+  "weight",
+];
 
 export function quantile(sorted: number[], p: number) {
   const i = p * (sorted.length - 1);
