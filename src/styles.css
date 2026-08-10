@@ -209,7 +209,7 @@ header span {
 }
 .cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 15px;
 }
 .cards-period {
@@ -438,7 +438,7 @@ td:nth-child(2) {
     font-size: 30px;
   }
   .cards {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 8px;
   }
   .patient-profile {

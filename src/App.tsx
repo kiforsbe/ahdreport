@@ -37,7 +37,13 @@ import {
   median,
 } from "./report";
 
-const highlights: Metric[] = ["weight", "heartRate", "steps", "sleep"];
+const highlights: Metric[] = [
+  "weight",
+  "heartRate",
+  "steps",
+  "sleep",
+  "dietaryEnergy",
+];
 const bpMetrics: Metric[] = ["bloodPressureSystolic", "bloodPressureDiastolic"];
 const walkingMetrics: Metric[] = [
   "walkingSpeed",
@@ -50,6 +56,20 @@ const activityMetrics: Metric[] = [
   "distance",
   "activeEnergy",
   "sleep",
+];
+const nutritionMetrics: Metric[] = [
+  "dietaryEnergy",
+  "carbs",
+  "sugar",
+  "fiber",
+  "protein",
+  "fat",
+];
+const totalsMetrics: Metric[] = [
+  "steps",
+  "distance",
+  "activeEnergy",
+  ...nutritionMetrics,
 ];
 const MAX_TABLE_ROWS = 365;
 const MAX_PDF_TABLE_ROWS = 365;
@@ -378,7 +398,11 @@ function MetricChart({
   if (metric === "heartRate" || walkingMetrics.includes(metric))
     return <RangeMetricChart metric={metric} records={records} />;
   const printLayout = useContext(PrintLayoutContext);
-  const rows = daily(records, metric);
+  const rows = daily(
+    records,
+    metric,
+    totalsMetrics.includes(metric) ? "total" : "average",
+  );
   if (!rows.length)
     return (
       <div className="empty small">
