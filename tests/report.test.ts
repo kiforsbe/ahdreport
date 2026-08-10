@@ -3,9 +3,12 @@ import {
   change,
   daily,
   dailyStats,
+  decimalsByMetric,
   filtered,
+  labels,
   latest,
   median,
+  metricGroups,
 } from "../src/report";
 import type { HealthRecord } from "../src/shared/types";
 const rows: HealthRecord[] = [
@@ -71,4 +74,28 @@ describe("overview statistics", () => {
   });
   it("calculates the change from the first to latest value", () =>
     expect(change(weights, "weight")).toBe(3));
+});
+
+describe("nutrition metric metadata", () => {
+  const nutritionMetrics = [
+    "dietaryEnergy",
+    "carbs",
+    "sugar",
+    "fiber",
+    "protein",
+    "fat",
+  ] as const;
+  it("groups all six nutrition metrics under a Nutrition dashboard section", () => {
+    const nutritionGroup = metricGroups.find(
+      (group) => group.title === "Nutrition",
+    );
+    expect(nutritionGroup?.metrics).toEqual([...nutritionMetrics]);
+  });
+  it("labels dietary energy in whole kcal and macros to one decimal place", () => {
+    expect(labels.dietaryEnergy).toBe("Dietary energy");
+    expect(decimalsByMetric.dietaryEnergy).toBe(0);
+    nutritionMetrics
+      .filter((metric) => metric !== "dietaryEnergy")
+      .forEach((metric) => expect(decimalsByMetric[metric]).toBe(1));
+  });
 });

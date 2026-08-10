@@ -19,6 +19,12 @@ export const labels: Record<Metric, string> = {
   stairAscentSpeed: "Stair ascent speed",
   stairDescentSpeed: "Stair descent speed",
   sixMinuteWalk: "Six-minute walk",
+  dietaryEnergy: "Dietary energy",
+  carbs: "Carbohydrates",
+  sugar: "Sugar",
+  fiber: "Fiber",
+  protein: "Protein",
+  fat: "Fat",
   medication: "Medication",
 };
 export const decimalsByMetric: Record<Metric, number> = {
@@ -40,6 +46,12 @@ export const decimalsByMetric: Record<Metric, number> = {
   stairAscentSpeed: 2,
   stairDescentSpeed: 2,
   sixMinuteWalk: 1,
+  dietaryEnergy: 0,
+  carbs: 1,
+  sugar: 1,
+  fiber: 1,
+  protein: 1,
+  fat: 1,
   medication: 0,
 };
 // Distinct per-metric shades so adjacent columns in the same table (e.g. Vitals: diastolic/systolic/heart rate/weight) are easy to tell apart at a glance.
@@ -62,6 +74,12 @@ export const colorsByMetric: Record<Metric, string> = {
   stairAscentSpeed: "#0ca678",
   stairDescentSpeed: "#4263eb",
   sixMinuteWalk: "#e8590c",
+  dietaryEnergy: "#e03131",
+  carbs: "#f08c00",
+  sugar: "#e64980",
+  fiber: "#2f9e44",
+  protein: "#4263eb",
+  fat: "#9c36b5",
   medication: "#e03131",
 };
 export const metricGroups: { title: string; metrics: Metric[] }[] = [
@@ -91,6 +109,10 @@ export const metricGroups: { title: string; metrics: Metric[] }[] = [
       "stairDescentSpeed",
       "sixMinuteWalk",
     ],
+  },
+  {
+    title: "Nutrition",
+    metrics: ["dietaryEnergy", "carbs", "sugar", "fiber", "protein", "fat"],
   },
 ];
 export function filtered(records: HealthRecord[], from: string, to: string) {
