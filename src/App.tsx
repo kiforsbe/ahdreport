@@ -23,6 +23,7 @@ import { DebouncedDateInput } from "./components/DebouncedDateInput";
 import { OverviewCards } from "./components/OverviewCards";
 import { MetricChart } from "./components/charts/MetricChart";
 import { BloodPressureChart } from "./components/charts/BloodPressureChart";
+import { PulsePressureChart } from "./components/charts/PulsePressureChart";
 import { coverageNote } from "./components/TableNotes";
 import { ReportTable } from "./components/tables/ReportTable";
 import { VitalsReportTable } from "./components/tables/VitalsReportTable";
@@ -330,6 +331,9 @@ export function App() {
             <div className="grid">
               {group.title === "Vitals" && hasBloodPressure && (
                 <BloodPressureChart records={records} from={from} to={to} />
+              )}{" "}
+              {group.title === "Vitals" && hasBloodPressure && (
+                <PulsePressureChart records={records} />
               )}{" "}
               {group.metrics
                 .filter(
