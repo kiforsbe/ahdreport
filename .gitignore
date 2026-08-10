@@ -5,6 +5,7 @@ dist-electron
 .env
 patient.env
 docs/temp_plans/
+.superpowers/
 
 # Local Apple Health exports may contain sensitive health data.
 export.xml
