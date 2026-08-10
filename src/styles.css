@@ -478,7 +478,8 @@ td:nth-child(2) {
     break-inside: avoid;
   }
   .dashboard .table-notes,
-  .dashboard .bp-legend {
+  .dashboard .bp-legend,
+  .dashboard .chart-legend {
     display: none !important;
   }
   .print-report {

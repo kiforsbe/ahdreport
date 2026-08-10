@@ -397,7 +397,9 @@ function MetricChart({
 }) {
   if (metric === "heartRate" || walkingMetrics.includes(metric))
     return <RangeMetricChart metric={metric} records={records} />;
+  if (metric === "carbs") return <CarbsChart records={records} />;
   const printLayout = useContext(PrintLayoutContext);
+  const color = colorsByMetric[metric];
   const rows = daily(
     records,
     metric,
@@ -409,22 +411,24 @@ function MetricChart({
         No {labels[metric].toLowerCase()} records in this period.
       </div>
     );
+  const values = rows.map((row) => row.value);
+  const axisMin = niceAxisMin(Math.min(...values), Math.max(...values));
   const chart = (width?: number, height?: number) => (
     <AreaChart data={rows} width={width} height={height}>
         <defs>
           <linearGradient id={`fill-${metric}`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#4263eb" stopOpacity=".32" />
-            <stop offset="100%" stopColor="#4263eb" stopOpacity=".02" />
+            <stop offset="0%" stopColor={color} stopOpacity=".32" />
+            <stop offset="100%" stopColor={color} stopOpacity=".02" />
           </linearGradient>
         </defs>
         <CartesianGrid vertical={false} stroke="#e7eaf0" />
         <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
-        <YAxis tick={{ fontSize: 11 }} width={45} />
+        <YAxis domain={[axisMin, "auto"]} tick={{ fontSize: 11 }} width={45} />
         <Tooltip formatter={(value) => format(Number(value), rows[0].unit)} />
         <Area
           type="monotone"
           dataKey="value"
-          stroke="#4263eb"
+          stroke={color}
           strokeWidth={2.5}
           fill={`url(#fill-${metric})`}
           isAnimationActive={!printLayout}
@@ -473,17 +477,20 @@ function RangeMetricChart({
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const color = colorsByMetric[metric];
-  const rows = dailyStats(records, metric).map((day) => ({
-    date: day.date,
-    unit: day.unit,
-    label: labels[metric],
-    color,
-    low: day.min,
-    high: day.max,
-    average: day.average,
-    base: day.min,
-    range: day.max - day.min,
-  }));
+  const rows = dailyStats(records, metric)
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((day) => ({
+      date: day.date,
+      unit: day.unit,
+      label: labels[metric],
+      color,
+      low: day.min,
+      high: day.max,
+      average: day.average,
+      base: day.min,
+      range: day.max - day.min,
+    }));
   if (!rows.length)
     return (
       <div className="empty small">
@@ -492,6 +499,10 @@ function RangeMetricChart({
     );
   const overallAverage =
     rows.reduce((total, row) => total + row.average, 0) / rows.length;
+  const axisMin = niceAxisMin(
+    Math.min(...rows.map((row) => row.low)),
+    Math.max(...rows.map((row) => row.high)),
+  );
   const chart = (width?: number, height?: number) => (
     <ComposedChart
       data={rows}
@@ -501,7 +512,7 @@ function RangeMetricChart({
     >
       <CartesianGrid vertical={false} stroke="#e7eaf0" />
       <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
-      <YAxis tick={{ fontSize: 11 }} width={45} />
+      <YAxis domain={[axisMin, "auto"]} tick={{ fontSize: 11 }} width={45} />
       <Tooltip content={<RangeMetricTooltip />} />
       <ReferenceLine
         y={overallAverage}
@@ -535,6 +546,109 @@ function RangeMetricChart({
       <small style={{ color }}>
         ▮ Daily range (avg tick) · ┄ Overall average {format(overallAverage, rows[0].unit)}
       </small>
+    </>
+  );
+}
+function CarbsTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  return (
+    <div
+      style={{
+        background: "white",
+        border: "1px solid #e4e8ef",
+        borderRadius: 8,
+        padding: "8px 11px",
+        fontSize: 12,
+      }}
+    >
+      <b>{new Date(`${label}T00:00:00`).toLocaleDateString()}</b>
+      <div style={{ color: colorsByMetric.carbs, marginTop: 4 }}>
+        Carbohydrates: {format(row.carbs, row.unit)}
+      </div>
+      <div style={{ color: colorsByMetric.sugar }}>
+        of which sugar: {format(row.sugar, row.unit)}
+      </div>
+    </div>
+  );
+}
+function CarbsChart({ records }: { records: HealthData["records"] }) {
+  const printLayout = useContext(PrintLayoutContext);
+  const carbTotals = new Map(
+    daily(records, "carbs", "total").map((d) => [d.date, d]),
+  );
+  const sugarTotals = new Map(
+    daily(records, "sugar", "total").map((d) => [d.date, d]),
+  );
+  const dates = [
+    ...new Set([...carbTotals.keys(), ...sugarTotals.keys()]),
+  ].sort((a, b) => a.localeCompare(b));
+  const rows = dates.map((date) => {
+    const carbs = carbTotals.get(date)?.value ?? 0;
+    const sugar = sugarTotals.get(date)?.value ?? 0;
+    const unit = carbTotals.get(date)?.unit ?? sugarTotals.get(date)?.unit ?? "g";
+    return { date, unit, carbs, sugar, other: Math.max(0, carbs - sugar) };
+  });
+  if (!rows.length)
+    return (
+      <div className="empty small">
+        No carbohydrate records in this period.
+      </div>
+    );
+  const chart = (width?: number, height?: number) => (
+    <AreaChart data={rows} width={width} height={height}>
+      <defs>
+        <linearGradient id="fill-carbs-other" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={colorsByMetric.carbs} stopOpacity=".32" />
+          <stop offset="100%" stopColor={colorsByMetric.carbs} stopOpacity=".02" />
+        </linearGradient>
+        <linearGradient id="fill-carbs-sugar" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={colorsByMetric.sugar} stopOpacity=".55" />
+          <stop offset="100%" stopColor={colorsByMetric.sugar} stopOpacity=".08" />
+        </linearGradient>
+      </defs>
+      <CartesianGrid vertical={false} stroke="#e7eaf0" />
+      <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
+      <YAxis tick={{ fontSize: 11 }} width={45} />
+      <Tooltip content={<CarbsTooltip />} />
+      <Area
+        type="monotone"
+        dataKey="sugar"
+        stackId="carbs"
+        stroke={colorsByMetric.sugar}
+        strokeWidth={2}
+        fill="url(#fill-carbs-sugar)"
+        isAnimationActive={!printLayout}
+      />
+      <Area
+        type="monotone"
+        dataKey="other"
+        stackId="carbs"
+        stroke={colorsByMetric.carbs}
+        strokeWidth={2}
+        fill="url(#fill-carbs-other)"
+        isAnimationActive={!printLayout}
+      />
+    </AreaChart>
+  );
+  return (
+    <>
+      {printLayout ? (
+        <div data-pdf-chart-ready="true">{chart(680, 260)}</div>
+      ) : (
+        <ResponsiveContainer key="carbs-screen" width="100%" height={210}>
+          {chart()}
+        </ResponsiveContainer>
+      )}
+      {!printLayout && (
+        <div className="chart-legend">
+          <small style={{ color: colorsByMetric.sugar }}>▮ Sugar</small>
+          <small style={{ color: colorsByMetric.carbs, marginLeft: 14 }}>
+            ▮ Other carbohydrates
+          </small>
+        </div>
+      )}
     </>
   );
 }
@@ -602,10 +716,10 @@ function BpTooltip({ active, payload, label }: any) {
       }}
     >
       <b>{new Date(`${label}T00:00:00`).toLocaleDateString()}</b>
-      <div style={{ color: "#e8590c", marginTop: 4 }}>
+      <div style={{ color: colorsByMetric.bloodPressureSystolic, marginTop: 4 }}>
         Systolic: {range(row.sLow, row.sHigh, row.sAvg)}
       </div>
-      <div style={{ color: "#4263eb" }}>
+      <div style={{ color: colorsByMetric.bloodPressureDiastolic }}>
         Diastolic: {range(row.dLow, row.dHigh, row.dAvg)}
       </div>
     </div>
@@ -668,6 +782,13 @@ function BloodPressureChart({
       .filter((v): v is number => v !== undefined);
     return values.reduce((a, v) => a + v, 0) / values.length;
   };
+  const lows = rows
+    .flatMap((r) => [r.sLow, r.dLow])
+    .filter((v): v is number => v !== undefined);
+  const highs = rows
+    .flatMap((r) => [r.sHigh, r.dHigh])
+    .filter((v): v is number => v !== undefined);
+  const axisMin = niceAxisMin(Math.min(...lows), Math.max(...highs));
   const chart = (width?: number, height?: number) => (
     <ComposedChart
       data={rows}
@@ -678,7 +799,7 @@ function BloodPressureChart({
     >
       <CartesianGrid vertical={false} stroke="#e7eaf0" />
       <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
-      <YAxis tick={{ fontSize: 11 }} width={45} />
+      <YAxis domain={[axisMin, "auto"]} tick={{ fontSize: 11 }} width={45} />
       <Tooltip content={<BpTooltip />} />
       <Bar
         dataKey="sBase"
@@ -689,7 +810,12 @@ function BloodPressureChart({
       <Bar
         dataKey="sRange"
         stackId="s"
-        shape={bpRangeBarShape("#e8590c", "sLow", "sHigh", "sAvg")}
+        shape={bpRangeBarShape(
+          colorsByMetric.bloodPressureSystolic,
+          "sLow",
+          "sHigh",
+          "sAvg",
+        )}
         isAnimationActive={false}
       />
       <Bar
@@ -701,7 +827,12 @@ function BloodPressureChart({
       <Bar
         dataKey="dRange"
         stackId="d"
-        shape={bpRangeBarShape("#4263eb", "dLow", "dHigh", "dAvg")}
+        shape={bpRangeBarShape(
+          colorsByMetric.bloodPressureDiastolic,
+          "dLow",
+          "dHigh",
+          "dAvg",
+        )}
         isAnimationActive={false}
       />
     </ComposedChart>
@@ -736,10 +867,15 @@ function BloodPressureChart({
       )}
       {!printLayout && (
         <div className="bp-legend">
-          <small style={{ color: "#e8590c" }}>
+          <small style={{ color: colorsByMetric.bloodPressureSystolic }}>
             ▮ Systolic (range, avg tick)
           </small>
-          <small style={{ color: "#4263eb", marginLeft: 14 }}>
+          <small
+            style={{
+              color: colorsByMetric.bloodPressureDiastolic,
+              marginLeft: 14,
+            }}
+          >
             ▮ Diastolic (range, avg tick)
           </small>
         </div>
@@ -747,7 +883,13 @@ function BloodPressureChart({
     </article>
   );
 }
-function DayTrace({ values }: { values: number[] }) {
+function DayTrace({
+  values,
+  color = DEFAULT_SHADE_COLOR,
+}: {
+  values: number[];
+  color?: string;
+}) {
   const low = Math.min(...values);
   const high = Math.max(...values);
   const range = high - low || 1;
@@ -768,7 +910,7 @@ function DayTrace({ values }: { values: number[] }) {
       <polyline
         points={points}
         fill="none"
-        stroke="#4263eb"
+        stroke={color}
         strokeWidth="2"
         vectorEffect="non-scaling-stroke"
       />
@@ -799,6 +941,19 @@ function ticksAtStep(min: number, max: number, step: number): number[] {
 function niceTicks(min: number, max: number, targetCount: number): number[] {
   if (!(max > min)) return [];
   return ticksAtStep(min, max, niceStep(max - min, targetCount));
+}
+// Lifts a chart's y-axis floor off zero when every value sits well above it, so a
+// tightly clustered series (e.g. weight, heart rate) isn't squashed into a thin band
+// at the top. Falls back to zero whenever the data itself reaches zero or below,
+// since zero is meaningful there and there is no "common threshold" to lift off of.
+function niceAxisMin(
+  min: number,
+  max: number,
+  targetCount = DEFAULT_GRID_TICK_COUNT,
+) {
+  if (!(max > min) || min <= 0) return 0;
+  const step = niceStep(max - min, targetCount);
+  return Math.max(0, Math.floor(min / step) * step);
 }
 function DailyDistribution({
   min,
@@ -986,6 +1141,9 @@ function DailyTotalBar({
   gridColor = DEFAULT_GRID_COLOR,
   gridMinorDivisions = DEFAULT_GRID_MINOR_DIVISIONS,
   color = DEFAULT_SHADE_COLOR,
+  subValue,
+  subColor,
+  subLabel,
 }: {
   value: number;
   columnMax: number;
@@ -995,6 +1153,9 @@ function DailyTotalBar({
   gridColor?: string;
   gridMinorDivisions?: number;
   color?: string;
+  subValue?: number;
+  subColor?: string;
+  subLabel?: string;
 }) {
   const clipId = useId();
   const max = columnMax || 1;
@@ -1040,13 +1201,14 @@ function DailyTotalBar({
         ))}
     </>
   );
+  const clampedSubValue =
+    subValue === undefined ? undefined : Math.min(subValue, value);
+  const ariaLabel =
+    clampedSubValue === undefined || !subLabel
+      ? `${format(value, unit, decimals)} of up to ${format(max, unit, decimals)} for this column`
+      : `${format(value, unit, decimals)} of up to ${format(max, unit, decimals)} for this column, including ${format(subValue!, unit, decimals)} ${subLabel}`;
   return (
-    <svg
-      width="195"
-      height="28"
-      viewBox="0 0 195 28"
-      aria-label={`${format(value, unit, decimals)} of up to ${format(max, unit, decimals)} for this column`}
-    >
+    <svg width="195" height="28" viewBox="0 0 195 28" aria-label={ariaLabel}>
       {grid}
       <defs>
         <clipPath id={clipId}>
@@ -1070,6 +1232,16 @@ function DailyTotalBar({
         fill={color}
         clipPath={`url(#${clipId})`}
       />
+      {clampedSubValue !== undefined && subColor && (
+        <rect
+          x="8"
+          y="8"
+          width={x(clampedSubValue) - 8}
+          height="12"
+          fill={subColor}
+          clipPath={`url(#${clipId})`}
+        />
+      )}
       <text x={labelX} y="17" fontSize="9" textAnchor="end" fill={labelFill}>
         {format(value, "", decimals)}
       </text>
@@ -1133,7 +1305,7 @@ function ReportTable({
               </td>
               <td>
                 {day.values.length > 1 ? (
-                  <DayTrace values={day.values} />
+                  <DayTrace values={day.values} color={colorsByMetric[metric]} />
                 ) : (
                   <small>Single reading</small>
                 )}
@@ -1484,7 +1656,8 @@ function NutritionReportTable({
   );
   const unitFor = (metric: Metric) =>
     totalsByMetric.get(metric)!.values().next().value?.unit ?? "";
-  const columnNotes = nutritionMetrics.map((metric) => {
+  const tableColumns = nutritionMetrics.filter((metric) => metric !== "sugar");
+  const columnNotes = tableColumns.map((metric) => {
     const note = coverageNote(metric, records, from, to);
     return note ? `${labels[metric]} — ${note}` : null;
   });
@@ -1492,13 +1665,17 @@ function NutritionReportTable({
     <section className="report-section">
       <h3>Daily nutrition</h3>
       <TableNotes
-        notes={[truncationNote(dates.length, allDates.length), ...columnNotes]}
+        notes={[
+          truncationNote(dates.length, allDates.length),
+          "Carbohydrates bars include a darker sugar segment.",
+          ...columnNotes,
+        ]}
       />
       <table>
         <thead>
           <tr>
             <th>Date</th>
-            {nutritionMetrics.map((metric) => (
+            {tableColumns.map((metric) => (
               <th key={metric}>
                 {labels[metric]}
                 {unitLabel(unitFor(metric))}
@@ -1510,9 +1687,13 @@ function NutritionReportTable({
           {dates.map((date) => (
             <tr key={date}>
               <td>{new Date(`${date}T00:00:00`).toLocaleDateString()}</td>
-              {nutritionMetrics.map((metric) => {
+              {tableColumns.map((metric) => {
                 const day = totalsByMetric.get(metric)!.get(date);
                 const bounds = boundsByMetric.get(metric)!;
+                const sugarDay =
+                  metric === "carbs"
+                    ? totalsByMetric.get("sugar")!.get(date)
+                    : undefined;
                 return (
                   <td key={metric}>
                     {day ? (
@@ -1522,6 +1703,9 @@ function NutritionReportTable({
                         unit={day.unit}
                         decimals={decimalsByMetric[metric]}
                         color={colorsByMetric[metric]}
+                        subValue={sugarDay?.total}
+                        subColor={colorsByMetric.sugar}
+                        subLabel={labels.sugar.toLowerCase()}
                       />
                     ) : (
                       <small>—</small>
@@ -1831,6 +2015,7 @@ export function App() {
                 .filter(
                   (m) =>
                     !bpMetrics.includes(m) &&
+                    m !== "sugar" &&
                     records.some((r) => r.metric === m),
                 )
                 .map((m) => {
