@@ -12,7 +12,7 @@ import type { HealthData } from "../../shared/types";
 import { bpDerived, format, outlierDates } from "../../report";
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
-import { outlierDot, OutlierNote } from "./outlierHelpers";
+import { outlierDot } from "./outlierHelpers";
 
 const PULSE_PRESSURE_COLOR = "#5c5f66";
 const MAP_COLOR = "#0b7285";
@@ -68,7 +68,11 @@ export function PulsePressureChart({ records }: { records: HealthData["records"]
         stroke={PULSE_PRESSURE_COLOR}
         strokeWidth={2.5}
         fill="none"
-        dot={outlierDot(ppOutliers, PULSE_PRESSURE_COLOR)}
+        dot={outlierDot(ppOutliers, PULSE_PRESSURE_COLOR, {
+          valueKey: "pulsePressure",
+          unit: "mmHg",
+          decimals: 0,
+        })}
         isAnimationActive={!printLayout}
       />
       <Area
@@ -77,7 +81,11 @@ export function PulsePressureChart({ records }: { records: HealthData["records"]
         stroke={MAP_COLOR}
         strokeWidth={2.5}
         fill="none"
-        dot={outlierDot(mapOutliers, MAP_COLOR)}
+        dot={outlierDot(mapOutliers, MAP_COLOR, {
+          valueKey: "map",
+          unit: "mmHg",
+          decimals: 0,
+        })}
         isAnimationActive={!printLayout}
       />
     </AreaChart>
@@ -99,24 +107,6 @@ export function PulsePressureChart({ records }: { records: HealthData["records"]
             ▮ Mean arterial pressure
           </small>
         </div>
-      )}
-      {!printLayout && (
-        <>
-          <OutlierNote
-            label="Pulse pressure"
-            outliers={ppOutliers}
-            rows={rows.map((r) => ({ date: r.date, value: r.pulsePressure }))}
-            unit="mmHg"
-            decimals={0}
-          />
-          <OutlierNote
-            label="MAP"
-            outliers={mapOutliers}
-            rows={rows.map((r) => ({ date: r.date, value: r.map }))}
-            unit="mmHg"
-            decimals={0}
-          />
-        </>
       )}
     </article>
   );

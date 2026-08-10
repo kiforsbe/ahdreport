@@ -9,6 +9,9 @@ import {
 } from "../chartMath";
 import { format } from "../report";
 
+const NATIVE_WIDTH = 195;
+const NATIVE_HEIGHT = 28;
+
 export function DailyTotalBar({
   value,
   columnMax,
@@ -21,6 +24,7 @@ export function DailyTotalBar({
   subValue,
   subColor,
   subLabel,
+  width = NATIVE_WIDTH,
 }: {
   value: number;
   columnMax: number;
@@ -33,13 +37,18 @@ export function DailyTotalBar({
   subValue?: number;
   subColor?: string;
   subLabel?: string;
+  width?: number;
 }) {
   const clipId = useId();
   const max = columnMax || 1;
-  const x = (v: number) => 8 + (Math.max(0, Math.min(v, max)) / max) * 144;
-  const labelX = 146;
+  const leftPad = 8;
+  const barRightEdge = width - 43;
+  const barWidth = barRightEdge - leftPad;
+  const x = (v: number) =>
+    leftPad + (Math.max(0, Math.min(v, max)) / max) * barWidth;
+  const labelX = barRightEdge - 6;
   const labelFill = x(value) >= labelX - 4 ? "#ffffff" : "#17213a";
-  const inRange = (gx: number) => gx > 9 && gx < 151;
+  const inRange = (gx: number) => gx > leftPad + 1 && gx < barRightEdge - 1;
   const step = niceStep(max, gridTickCount);
   const majorTicks = ticksAtStep(0, max, step);
   const minorTicks = ticksAtStep(0, max, step / gridMinorDivisions).filter(
@@ -85,35 +94,40 @@ export function DailyTotalBar({
       ? `${format(value, unit, decimals)} of up to ${format(max, unit, decimals)} for this column`
       : `${format(value, unit, decimals)} of up to ${format(max, unit, decimals)} for this column, including ${format(subValue!, unit, decimals)} ${subLabel}`;
   return (
-    <svg width="195" height="28" viewBox="0 0 195 28" aria-label={ariaLabel}>
+    <svg
+      width={width}
+      height={NATIVE_HEIGHT}
+      viewBox={`0 0 ${width} ${NATIVE_HEIGHT}`}
+      aria-label={ariaLabel}
+    >
       {grid}
       <defs>
         <clipPath id={clipId}>
-          <rect x="8" y="8" width="144" height="12" rx="6" />
+          <rect x={leftPad} y="8" width={barWidth} height="12" rx="6" />
         </clipPath>
       </defs>
       <rect
-        x="8"
+        x={leftPad}
         y="8"
-        width="144"
+        width={barWidth}
         height="12"
         rx="6"
         fill={color}
         fillOpacity=".18"
       />
       <rect
-        x="8"
+        x={leftPad}
         y="8"
-        width={x(value) - 8}
+        width={x(value) - leftPad}
         height="12"
         fill={color}
         clipPath={`url(#${clipId})`}
       />
       {clampedSubValue !== undefined && subColor && (
         <rect
-          x="8"
+          x={leftPad}
           y="8"
-          width={x(clampedSubValue) - 8}
+          width={x(clampedSubValue) - leftPad}
           height="12"
           fill={subColor}
           clipPath={`url(#${clipId})`}

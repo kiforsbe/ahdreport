@@ -26,7 +26,7 @@ import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { RangeMetricChart } from "./RangeMetricChart";
 import { CarbsChart } from "./CarbsChart";
-import { outlierDot, OutlierNote } from "./outlierHelpers";
+import { outlierDot } from "./outlierHelpers";
 
 export function MetricChart({
   metric,
@@ -82,7 +82,10 @@ export function MetricChart({
           strokeOpacity={0.35}
           fill={`url(#fill-${metric})`}
           isAnimationActive={!printLayout}
-          dot={outlierDot(outliers, color)}
+          dot={outlierDot(outliers, color, {
+            unit: rows[0].unit,
+            decimals: decimalsByMetric[metric],
+          })}
         />
         {plateauRows.length > 0 && (
           <Line
@@ -104,12 +107,6 @@ export function MetricChart({
       <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
         {chart()}
       </ResponsiveContainer>
-      <OutlierNote
-        outliers={outliers}
-        rows={rows}
-        unit={rows[0].unit}
-        decimals={decimalsByMetric[metric]}
-      />
     </>
   );
 }

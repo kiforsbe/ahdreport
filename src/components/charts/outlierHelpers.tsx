@@ -1,35 +1,31 @@
-import { format, formatDate } from "../../report";
+import { format } from "../../report";
 
-export function outlierDot(outliers: Set<string>, color: string) {
+export function outlierDot(
+  outliers: Set<string>,
+  color: string,
+  options?: { valueKey?: string; unit?: string; decimals?: number },
+) {
+  const valueKey = options?.valueKey ?? "value";
   return (props: any) => {
     const { cx, cy, payload } = props;
     if (!payload || !outliers.has(payload.date)) return <g />;
+    const value = payload[valueKey];
     return (
-      <circle cx={cx} cy={cy} r={5} fill="white" stroke={color} strokeWidth={2.5} />
+      <g>
+        <circle cx={cx} cy={cy} r={5} fill="white" stroke={color} strokeWidth={2.5} />
+        {value !== undefined && (
+          <text
+            x={cx}
+            y={cy - 10}
+            textAnchor="middle"
+            fontSize={10}
+            fontWeight={600}
+            fill={color}
+          >
+            {format(value, options?.unit ?? "", options?.decimals)}
+          </text>
+        )}
+      </g>
     );
   };
-}
-export function OutlierNote({
-  label,
-  outliers,
-  rows,
-  unit,
-  decimals,
-}: {
-  label?: string;
-  outliers: Set<string>;
-  rows: { date: string; value: number }[];
-  unit: string;
-  decimals?: number;
-}) {
-  if (!outliers.size) return null;
-  const flagged = rows.filter((row) => outliers.has(row.date)).slice(0, 5);
-  return (
-    <small className="table-notes">
-      {label ? `${label} — u` : "U"}nusual:{" "}
-      {flagged
-        .map((row) => `${formatDate(row.date)} (${format(row.value, unit, decimals)})`)
-        .join(", ")}
-    </small>
-  );
 }

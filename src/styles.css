@@ -339,51 +339,22 @@ main.print-layout {
 .diagnostics b {
   color: #263348;
 }
-.bp-category {
-  margin-top: 14px;
-  display: grid;
-  gap: 8px;
-}
-.bp-scheme-toggle {
-  display: flex;
-  gap: 6px;
-}
-.bp-scheme-toggle button {
-  padding: 4px 10px;
-  font-size: 12px;
-  min-height: 0;
-}
-.bp-scheme-toggle button.active {
-  background: #4263eb;
-  border-color: #4263eb;
-  color: white;
-}
-.bp-badge {
-  border-left: 3px solid;
-  padding: 6px 10px;
+.bp-section-warning {
+  border-left: 4px solid;
+  padding: 8px 12px;
   background: #f6f8fb;
   border-radius: 6px;
+  margin: -6px 0 20px;
 }
-.bp-badge span {
+.bp-section-warning span {
   display: block;
   font-size: 11px;
   color: #718096;
 }
-.bp-badge strong {
+.bp-section-warning strong {
   display: block;
   font-size: 15px;
   margin: 2px 0;
-}
-.bp-strip {
-  display: flex;
-  gap: 2px;
-  flex-wrap: wrap;
-}
-.bp-strip-cell {
-  width: 10px;
-  height: 18px;
-  border-radius: 2px;
-  display: inline-block;
 }
 .print-report {
   margin-top: 52px;
@@ -526,7 +497,7 @@ td:nth-child(2) {
   .dashboard .table-notes,
   .dashboard .bp-legend,
   .dashboard .chart-legend,
-  .dashboard .bp-category {
+  .dashboard .bp-section-warning {
     display: none !important;
   }
   .print-report {

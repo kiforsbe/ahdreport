@@ -24,6 +24,7 @@ import { OverviewCards } from "./components/OverviewCards";
 import { MetricChart } from "./components/charts/MetricChart";
 import { BloodPressureChart } from "./components/charts/BloodPressureChart";
 import { PulsePressureChart } from "./components/charts/PulsePressureChart";
+import { BpHypertensionWarning } from "./components/BpHypertensionWarning";
 import { coverageNote } from "./components/TableNotes";
 import { ReportTable } from "./components/tables/ReportTable";
 import { VitalsReportTable } from "./components/tables/VitalsReportTable";
@@ -328,6 +329,9 @@ export function App() {
         {metricGroups.map((group) => (
           <section key={group.title} className="group">
             <h2>{group.title}</h2>
+            {group.title === "Vitals" && hasBloodPressure && !printLayout && (
+              <BpHypertensionWarning records={records} />
+            )}
             <div className="grid">
               {group.title === "Vitals" && hasBloodPressure && (
                 <BloodPressureChart records={records} from={from} to={to} />

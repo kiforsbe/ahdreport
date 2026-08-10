@@ -1,9 +1,12 @@
+import { format } from "../../report";
+
 export function bpRangeBarShape(
   color: string,
   lowKey: string,
   highKey: string,
   avgKey: string,
   outlierKey?: string,
+  labelOptions?: { unit?: string; decimals?: number },
 ) {
   return (props: any) => {
     const { x, y, width, height, payload } = props;
@@ -40,17 +43,29 @@ export function bpRangeBarShape(
           strokeWidth={2}
         />
         {isOutlier && (
-          <rect
-            x={xAdj - 2}
-            y={yAdj - 2}
-            width={barWidth + 4}
-            height={barHeight + 4}
-            rx={Math.min(6, width / 2 + 2)}
-            fill="none"
-            stroke={color}
-            strokeWidth={1.5}
-            strokeDasharray="3 2"
-          />
+          <>
+            <rect
+              x={xAdj - 2}
+              y={yAdj - 2}
+              width={barWidth + 4}
+              height={barHeight + 4}
+              rx={Math.min(6, width / 2 + 2)}
+              fill="none"
+              stroke={color}
+              strokeWidth={1.5}
+              strokeDasharray="3 2"
+            />
+            <text
+              x={xAdj + barWidth / 2}
+              y={yAdj - 8}
+              textAnchor="middle"
+              fontSize={10}
+              fontWeight={600}
+              fill={color}
+            >
+              {format(average, labelOptions?.unit ?? "", labelOptions?.decimals)}
+            </text>
+          </>
         )}
       </g>
     );

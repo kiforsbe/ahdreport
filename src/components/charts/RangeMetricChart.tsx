@@ -21,7 +21,6 @@ import {
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { bpRangeBarShape } from "./bpChartShapes";
-import { OutlierNote } from "./outlierHelpers";
 
 function RangeMetricTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -111,7 +110,10 @@ export function RangeMetricChart({
       <Bar
         dataKey="range"
         stackId={metric}
-        shape={bpRangeBarShape(color, "low", "high", "average", "isOutlier")}
+        shape={bpRangeBarShape(color, "low", "high", "average", "isOutlier", {
+          unit: rows[0].unit,
+          decimals: decimalsByMetric[metric],
+        })}
         isAnimationActive={false}
       />
     </ComposedChart>
@@ -133,12 +135,6 @@ export function RangeMetricChart({
       <small style={{ color }}>
         ▮ Daily range (avg tick) · ┄ Overall average {format(overallAverage, rows[0].unit)}
       </small>
-      <OutlierNote
-        outliers={outliers}
-        rows={rows.map((row) => ({ date: row.date, value: row.average }))}
-        unit={rows[0].unit}
-        decimals={decimalsByMetric[metric]}
-      />
     </>
   );
 }

@@ -102,6 +102,7 @@ export function NutritionReportTable({
                         subValue={sugarDay?.total}
                         subColor={colorsByMetric.sugar}
                         subLabel={labels.sugar.toLowerCase()}
+                        width={158}
                       />
                     ) : (
                       <small>—</small>

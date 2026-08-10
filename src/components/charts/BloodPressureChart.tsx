@@ -1,8 +1,9 @@
-import { useContext, useState } from "react";
+import { useContext } from "react";
 import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,26 +14,28 @@ import {
   colorsByMetric,
   dailyStats,
   format,
-  formatDate,
   outlierDates,
   bpDerived,
-  bpPeriodAverage,
   bpCategorySwedish,
   bpCategoryColorsSwedish,
   bpCategoryOrderSwedish,
-  bpCategoryAha,
-  bpCategoryColorsAha,
-  bpCategoryOrderAha,
-  longestElevatedRun,
 } from "../../report";
-import type { BpScheme } from "../../report";
+import type { SwedishBpCategory } from "../../report";
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { coverageNote } from "../TableNotes";
 import { bpRangeBarShape } from "./bpChartShapes";
-import { OutlierNote } from "./outlierHelpers";
 
-function BpTooltip({ active, payload, label }: any) {
+const categoryShortLabelsSwedish: Record<SwedishBpCategory, string> = {
+  Optimal: "Optimal",
+  Normal: "Normal",
+  "High normal": "High-norm.",
+  "Grade 1 hypertension": "Grade 1",
+  "Grade 2 hypertension": "Grade 2",
+  "Grade 3 hypertension": "Grade 3",
+};
+
+function BpTooltip({ active, payload, label, categoryColors }: any) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
@@ -59,8 +62,29 @@ function BpTooltip({ active, payload, label }: any) {
       <div style={{ color: colorsByMetric.bloodPressureDiastolic }}>
         Diastolic: {range(row.dLow, row.dHigh, row.dAvg)}
       </div>
+      {row.category && (
+        <div style={{ color: categoryColors?.[row.category] ?? "#71717a" }}>
+          {row.category}
+        </div>
+      )}
     </div>
   );
+}
+function categoryDot(categoryColors: Record<string, string>) {
+  return (props: any) => {
+    const { cx, cy, payload } = props;
+    if (payload?.categoryRank === undefined) return <g />;
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={3}
+        fill={categoryColors[payload.category] ?? "#71717a"}
+        stroke="white"
+        strokeWidth={1}
+      />
+    );
+  };
 }
 export function BloodPressureChart({
   records,
@@ -72,7 +96,6 @@ export function BloodPressureChart({
   to: string;
 }) {
   const printLayout = useContext(PrintLayoutContext);
-  const [scheme, setScheme] = useState<BpScheme>("swedish");
   const sNote = coverageNote("bloodPressureSystolic", records, from, to);
   const dNote = coverageNote("bloodPressureDiastolic", records, from, to);
   const byDate = new Map<
@@ -137,45 +160,28 @@ export function BloodPressureChart({
       .filter((r): r is typeof r & { dAvg: number } => r.dAvg !== undefined)
       .map((r) => ({ date: r.date, value: r.dAvg })),
   );
-  const chartRows = rows.map((r) => ({
-    ...r,
-    sOutlier: sOutliers.has(r.date),
-    dOutlier: dOutliers.has(r.date),
-  }));
   const derivedDays = bpDerived(records);
-  const categoryFn: (systolic: number, diastolic: number) => string =
-    scheme === "swedish" ? bpCategorySwedish : bpCategoryAha;
-  const categoryColors: Record<string, string> =
-    scheme === "swedish" ? bpCategoryColorsSwedish : bpCategoryColorsAha;
-  const categoryOrder: string[] =
-    scheme === "swedish" ? bpCategoryOrderSwedish : bpCategoryOrderAha;
-  const floorCategory: string =
-    scheme === "swedish" ? "Grade 1 hypertension" : "Stage 1";
+  const categoryFn = bpCategorySwedish;
+  const categoryColors: Record<string, string> = bpCategoryColorsSwedish;
+  const categoryOrder: string[] = bpCategoryOrderSwedish;
+  const categoryShortLabels: Record<string, string> = categoryShortLabelsSwedish;
   const categorizedDays = derivedDays.map((d) => ({
     date: d.date,
     category: categoryFn(d.systolic, d.diastolic),
   }));
-  const periodAverage = bpPeriodAverage(derivedDays);
-  const periodCategory = periodAverage
-    ? categoryFn(periodAverage.systolic, periodAverage.diastolic)
-    : undefined;
-  const elevatedRun = longestElevatedRun(
-    categorizedDays,
-    categoryOrder,
-    floorCategory,
+  const categoryByDate = new Map(
+    categorizedDays.map((d) => [d.date, d.category]),
   );
-  const categoryPercentages = categoryOrder
-    .map((category) => ({
+  const chartRows = rows.map((r) => {
+    const category = categoryByDate.get(r.date);
+    return {
+      ...r,
+      sOutlier: sOutliers.has(r.date),
+      dOutlier: dOutliers.has(r.date),
       category,
-      pct: categorizedDays.length
-        ? Math.round(
-            (categorizedDays.filter((d) => d.category === category).length /
-              categorizedDays.length) *
-              100,
-          )
-        : 0,
-    }))
-    .filter((c) => c.pct > 0);
+      categoryRank: category ? categoryOrder.indexOf(category) : undefined,
+    };
+  });
   const chart = (width?: number, height?: number) => (
     <ComposedChart
       data={chartRows}
@@ -186,15 +192,35 @@ export function BloodPressureChart({
     >
       <CartesianGrid vertical={false} stroke="#e7eaf0" />
       <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
-      <YAxis domain={[axisMin, "auto"]} tick={{ fontSize: 11 }} width={45} />
-      <Tooltip content={<BpTooltip />} />
+      <YAxis
+        yAxisId="bp"
+        domain={[axisMin, "auto"]}
+        tick={{ fontSize: 11 }}
+        width={45}
+      />
+      {derivedDays.length > 0 && (
+        <YAxis
+          yAxisId="risk"
+          orientation="right"
+          domain={[0, categoryOrder.length - 1]}
+          ticks={categoryOrder.map((_, i) => i)}
+          tickFormatter={(v) => categoryShortLabels[categoryOrder[v]] ?? ""}
+          tick={{ fontSize: 10 }}
+          width={72}
+          axisLine={false}
+          tickLine={false}
+        />
+      )}
+      <Tooltip content={<BpTooltip categoryColors={categoryColors} />} />
       <Bar
+        yAxisId="bp"
         dataKey="sBase"
         stackId="s"
         fill="transparent"
         isAnimationActive={false}
       />
       <Bar
+        yAxisId="bp"
         dataKey="sRange"
         stackId="s"
         shape={bpRangeBarShape(
@@ -203,16 +229,19 @@ export function BloodPressureChart({
           "sHigh",
           "sAvg",
           "sOutlier",
+          { unit: "mmHg", decimals: 0 },
         )}
         isAnimationActive={false}
       />
       <Bar
+        yAxisId="bp"
         dataKey="dBase"
         stackId="d"
         fill="transparent"
         isAnimationActive={false}
       />
       <Bar
+        yAxisId="bp"
         dataKey="dRange"
         stackId="d"
         shape={bpRangeBarShape(
@@ -221,9 +250,24 @@ export function BloodPressureChart({
           "dHigh",
           "dAvg",
           "dOutlier",
+          { unit: "mmHg", decimals: 0 },
         )}
         isAnimationActive={false}
       />
+      {derivedDays.length > 0 && (
+        <Line
+          yAxisId="risk"
+          type="stepAfter"
+          dataKey="categoryRank"
+          stroke="#71717a"
+          strokeWidth={1.75}
+          strokeDasharray="4 2"
+          dot={categoryDot(categoryColors)}
+          isAnimationActive={!printLayout}
+          connectNulls={false}
+          name="Hypertension level"
+        />
+      )}
     </ComposedChart>
   );
   return (
@@ -267,90 +311,11 @@ export function BloodPressureChart({
           >
             ▮ Diastolic (range, avg tick)
           </small>
-        </div>
-      )}
-      {!printLayout && (
-        <>
-          <OutlierNote
-            label="Systolic"
-            outliers={sOutliers}
-            rows={rows
-              .filter((r): r is typeof r & { sAvg: number } => r.sAvg !== undefined)
-              .map((r) => ({ date: r.date, value: r.sAvg }))}
-            unit="mmHg"
-            decimals={0}
-          />
-          <OutlierNote
-            label="Diastolic"
-            outliers={dOutliers}
-            rows={rows
-              .filter((r): r is typeof r & { dAvg: number } => r.dAvg !== undefined)
-              .map((r) => ({ date: r.date, value: r.dAvg }))}
-            unit="mmHg"
-            decimals={0}
-          />
-        </>
-      )}
-      {!printLayout && derivedDays.length > 0 && (
-        <div className="bp-category">
-          <div
-            className="bp-scheme-toggle"
-            role="group"
-            aria-label="Blood pressure classification scheme"
-          >
-            <button
-              type="button"
-              className={scheme === "swedish" ? "active" : ""}
-              onClick={() => setScheme("swedish")}
-            >
-              Swedish
-            </button>
-            <button
-              type="button"
-              className={scheme === "aha" ? "active" : ""}
-              onClick={() => setScheme("aha")}
-            >
-              AHA
-            </button>
-          </div>
-          {periodAverage && periodCategory && (
-            <div
-              className="bp-badge"
-              style={{ borderColor: categoryColors[periodCategory] }}
-            >
-              <span>Period average</span>
-              <strong style={{ color: categoryColors[periodCategory] }}>
-                {format(periodAverage.systolic, "", 0)}/
-                {format(periodAverage.diastolic, "", 0)} mmHg — {periodCategory}
-              </strong>
-              <small>
-                Approximates the {scheme === "swedish" ? "Swedish (ESC/ESH)" : "AHA"}{" "}
-                home-monitoring diagnostic threshold; not a clinical diagnosis.
-              </small>
-            </div>
-          )}
-          {elevatedRun && (
-            <small className="table-notes">
-              Sustained: {elevatedRun.length} consecutive days at{" "}
-              {floorCategory} or higher ({formatDate(elevatedRun.start)}–
-              {formatDate(elevatedRun.end)}).
+          {derivedDays.length > 0 && (
+            <small style={{ color: "#71717a", marginLeft: 14 }}>
+              ┄● Hypertension level (right axis)
             </small>
           )}
-          <div className="bp-strip">
-            {categorizedDays.map((day) => (
-              <span
-                key={day.date}
-                className="bp-strip-cell"
-                style={{ background: categoryColors[day.category] }}
-                title={`${formatDate(day.date)}: ${day.category}`}
-              />
-            ))}
-          </div>
-          <small className="table-notes">
-            {categoryPercentages
-              .map((p) => `${p.pct}% ${p.category}`)
-              .join(" · ")}
-          </small>
         </div>
       )}
     </article>

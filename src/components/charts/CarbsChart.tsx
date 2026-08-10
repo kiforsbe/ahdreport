@@ -19,7 +19,7 @@ import {
   plateaus,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
-import { outlierDot, OutlierNote } from "./outlierHelpers";
+import { outlierDot } from "./outlierHelpers";
 
 function CarbsTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -110,7 +110,11 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         strokeOpacity={0.35}
         fill="url(#fill-carbs-other)"
         isAnimationActive={!printLayout}
-        dot={outlierDot(outliers, colorsByMetric.carbs)}
+        dot={outlierDot(outliers, colorsByMetric.carbs, {
+          valueKey: "carbs",
+          unit: rows[0].unit,
+          decimals: decimalsByMetric.carbs,
+        })}
       />
       {plateauRows.length > 0 && (
         <Line
@@ -141,14 +145,6 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
             ▮ Other carbohydrates
           </small>
         </div>
-      )}
-      {!printLayout && (
-        <OutlierNote
-          outliers={outliers}
-          rows={rows.map((row) => ({ date: row.date, value: row.carbs }))}
-          unit={rows[0].unit}
-          decimals={decimalsByMetric.carbs}
-        />
       )}
     </>
   );
