@@ -247,6 +247,24 @@ export function formatDate(isoDay: string) {
   return new Date(`${isoDay}T00:00:00`).toLocaleDateString();
 }
 
+// Tukey fences (1.5x IQR) — flags a day as statistically unusual without
+// excluding it; distinct from the parser's physiological-plausibility filter,
+// which excludes data before it ever reaches this function.
+export function outlierDates(
+  rows: { date: string; value: number }[],
+): Set<string> {
+  if (!rows.length) return new Set();
+  const sorted = rows.map((r) => r.value).sort((a, b) => a - b);
+  const q1 = quantile(sorted, 0.25);
+  const q3 = quantile(sorted, 0.75);
+  const iqr = q3 - q1 || 1;
+  const lower = q1 - iqr * 1.5;
+  const upper = q3 + iqr * 1.5;
+  return new Set(
+    rows.filter((r) => r.value < lower || r.value > upper).map((r) => r.date),
+  );
+}
+
 export const highlights: Metric[] = [
   "weight",
   "heartRate",

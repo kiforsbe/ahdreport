@@ -9,6 +9,7 @@ import {
   latest,
   median,
   metricGroups,
+  outlierDates,
 } from "../src/report";
 import type { HealthRecord } from "../src/shared/types";
 const rows: HealthRecord[] = [
@@ -101,5 +102,30 @@ describe("nutrition metric metadata", () => {
     nutritionMetrics
       .filter((metric) => metric !== "dietaryEnergy")
       .forEach((metric) => expect(decimalsByMetric[metric]).toBe(1));
+  });
+});
+
+describe("outlierDates", () => {
+  it("flags a clear IQR-violating spike", () => {
+    const rows = [
+      { date: "2026-01-01", value: 10 },
+      { date: "2026-01-02", value: 11 },
+      { date: "2026-01-03", value: 9 },
+      { date: "2026-01-04", value: 10 },
+      { date: "2026-01-05", value: 60 },
+      { date: "2026-01-06", value: 10 },
+    ];
+    expect(outlierDates(rows)).toEqual(new Set(["2026-01-05"]));
+  });
+  it("returns an empty set when nothing is unusual", () => {
+    const rows = [
+      { date: "2026-01-01", value: 10 },
+      { date: "2026-01-02", value: 11 },
+      { date: "2026-01-03", value: 9 },
+    ];
+    expect(outlierDates(rows)).toEqual(new Set());
+  });
+  it("returns an empty set for empty input", () => {
+    expect(outlierDates([])).toEqual(new Set());
   });
 });
