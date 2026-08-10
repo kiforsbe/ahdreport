@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -9,7 +9,23 @@ import {
   YAxis,
 } from "recharts";
 import type { HealthData } from "../../shared/types";
-import { colorsByMetric, dailyStats, format, outlierDates } from "../../report";
+import {
+  colorsByMetric,
+  dailyStats,
+  format,
+  formatDate,
+  outlierDates,
+  bpDerived,
+  bpPeriodAverage,
+  bpCategorySwedish,
+  bpCategoryColorsSwedish,
+  bpCategoryOrderSwedish,
+  bpCategoryAha,
+  bpCategoryColorsAha,
+  bpCategoryOrderAha,
+  longestElevatedRun,
+} from "../../report";
+import type { BpScheme } from "../../report";
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { coverageNote } from "../TableNotes";
@@ -56,6 +72,7 @@ export function BloodPressureChart({
   to: string;
 }) {
   const printLayout = useContext(PrintLayoutContext);
+  const [scheme, setScheme] = useState<BpScheme>("swedish");
   const sNote = coverageNote("bloodPressureSystolic", records, from, to);
   const dNote = coverageNote("bloodPressureDiastolic", records, from, to);
   const byDate = new Map<
@@ -125,6 +142,40 @@ export function BloodPressureChart({
     sOutlier: sOutliers.has(r.date),
     dOutlier: dOutliers.has(r.date),
   }));
+  const derivedDays = bpDerived(records);
+  const categoryFn: (systolic: number, diastolic: number) => string =
+    scheme === "swedish" ? bpCategorySwedish : bpCategoryAha;
+  const categoryColors: Record<string, string> =
+    scheme === "swedish" ? bpCategoryColorsSwedish : bpCategoryColorsAha;
+  const categoryOrder: string[] =
+    scheme === "swedish" ? bpCategoryOrderSwedish : bpCategoryOrderAha;
+  const floorCategory: string =
+    scheme === "swedish" ? "Grade 1 hypertension" : "Stage 1";
+  const categorizedDays = derivedDays.map((d) => ({
+    date: d.date,
+    category: categoryFn(d.systolic, d.diastolic),
+  }));
+  const periodAverage = bpPeriodAverage(derivedDays);
+  const periodCategory = periodAverage
+    ? categoryFn(periodAverage.systolic, periodAverage.diastolic)
+    : undefined;
+  const elevatedRun = longestElevatedRun(
+    categorizedDays,
+    categoryOrder,
+    floorCategory,
+  );
+  const categoryPercentages = categoryOrder
+    .map((category) => ({
+      category,
+      pct: categorizedDays.length
+        ? Math.round(
+            (categorizedDays.filter((d) => d.category === category).length /
+              categorizedDays.length) *
+              100,
+          )
+        : 0,
+    }))
+    .filter((c) => c.pct > 0);
   const chart = (width?: number, height?: number) => (
     <ComposedChart
       data={chartRows}
@@ -239,6 +290,68 @@ export function BloodPressureChart({
             decimals={0}
           />
         </>
+      )}
+      {!printLayout && derivedDays.length > 0 && (
+        <div className="bp-category">
+          <div
+            className="bp-scheme-toggle"
+            role="group"
+            aria-label="Blood pressure classification scheme"
+          >
+            <button
+              type="button"
+              className={scheme === "swedish" ? "active" : ""}
+              onClick={() => setScheme("swedish")}
+            >
+              Swedish
+            </button>
+            <button
+              type="button"
+              className={scheme === "aha" ? "active" : ""}
+              onClick={() => setScheme("aha")}
+            >
+              AHA
+            </button>
+          </div>
+          {periodAverage && periodCategory && (
+            <div
+              className="bp-badge"
+              style={{ borderColor: categoryColors[periodCategory] }}
+            >
+              <span>Period average</span>
+              <strong style={{ color: categoryColors[periodCategory] }}>
+                {format(periodAverage.systolic, "", 0)}/
+                {format(periodAverage.diastolic, "", 0)} mmHg — {periodCategory}
+              </strong>
+              <small>
+                Approximates the {scheme === "swedish" ? "Swedish (ESC/ESH)" : "AHA"}{" "}
+                home-monitoring diagnostic threshold; not a clinical diagnosis.
+              </small>
+            </div>
+          )}
+          {elevatedRun && (
+            <small className="table-notes">
+              Sustained: {elevatedRun.length} consecutive days at{" "}
+              {floorCategory} or higher ({formatDate(elevatedRun.start)}–
+              {formatDate(elevatedRun.end)}).
+            </small>
+          )}
+          <div className="bp-strip">
+            {categorizedDays.map((day) => (
+              <span
+                key={day.date}
+                className="bp-strip-cell"
+                style={{ background: categoryColors[day.category] }}
+                title={`${formatDate(day.date)}: ${day.category}`}
+              />
+            ))}
+          </div>
+          <small className="table-notes">
+            {categoryPercentages
+              .map((p) => `${p.pct}% ${p.category}`)
+              .join(" · ")}
+          </small>
+        </div>
       )}
     </article>
   );
