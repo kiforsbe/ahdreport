@@ -94,7 +94,7 @@ describe("physiological plausibility filtering", () => {
       }),
     ]);
     expect(result.diagnostics.implausible).toBe(1);
-    expect(result.diagnostics.warnings).toContain(
+    expect(result.diagnostics.warnings).not.toContain(
       "1 record(s) were excluded as physiologically implausible.",
     );
   });

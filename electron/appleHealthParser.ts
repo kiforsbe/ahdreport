@@ -231,11 +231,6 @@ export async function parseAppleHealthExport(
           ? []
           : ["No supported medication records were found in this export."]),
         ...(clinicalDataWarning ? [clinicalDataWarning] : []),
-        ...(implausible > 0
-          ? [
-              `${implausible} record(s) were excluded as physiologically implausible.`,
-            ]
-          : []),
       ],
     },
   };
