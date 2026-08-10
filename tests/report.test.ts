@@ -30,6 +30,10 @@ describe("report model", () => {
     expect(daily(rows, "weight")).toEqual([
       { date: "2026-01-01", value: 71, unit: "kg" },
     ]));
+  it("sums measurements per day when total aggregation is requested", () =>
+    expect(daily(rows, "weight", "total")).toEqual([
+      { date: "2026-01-01", value: 142, unit: "kg" },
+    ]));
   it("creates a compact daily statistical summary", () =>
     expect(dailyStats(rows, "weight")[0]).toMatchObject({
       date: "2026-01-01",

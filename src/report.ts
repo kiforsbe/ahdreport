@@ -147,7 +147,11 @@ export function change(records: HealthRecord[], metric: Metric) {
   if (values.length < 2) return undefined;
   return values.at(-1)!.value - values[0].value;
 }
-export function daily(records: HealthRecord[], metric: Metric) {
+export function daily(
+  records: HealthRecord[],
+  metric: Metric,
+  aggregate: "average" | "total" = "average",
+) {
   const map = new Map<string, { total: number; count: number; unit: string }>();
   records
     .filter((r) => r.metric === metric)
@@ -160,7 +164,7 @@ export function daily(records: HealthRecord[], metric: Metric) {
     });
   return [...map].map(([date, d]) => ({
     date,
-    value: d.total / d.count,
+    value: aggregate === "total" ? d.total : d.total / d.count,
     unit: d.unit,
   }));
 }
