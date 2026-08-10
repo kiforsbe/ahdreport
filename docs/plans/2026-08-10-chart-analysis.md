@@ -4,7 +4,7 @@
 
 **Goal:** Add plateau segmentation, outlier call-outs, and blood-pressure derived metrics (pulse pressure/MAP, Swedish/AHA category classification with a period-average badge and sustained-run call-out) to the dashboard, plus physiological-plausibility filtering in the Apple Health parser.
 
-**Architecture:** Five new pure functions live in `src/report.ts` (`plateaus`, `outlierDates`, `bpDerived`, `bpPeriodAverage`, `bpCategorySwedish`/`bpCategoryAha`/`longestElevatedRun` and their supporting constants) — all framework-free, unit-tested directly with Vitest. `src/App.tsx` consumes them to extend five existing chart components (`MetricChart`, `CarbsChart`, `RangeMetricChart`, `BloodPressureChart`) and add one new one (`PulsePressureChart`), plus two small shared rendering helpers (`outlierDot`, `OutlierNote`) reused across all of them. `electron/appleHealthParser.ts` gets a new plausibility-bounds table applied inline in the existing parse loop, with a new `implausible` diagnostics counter threaded through `src/shared/types.ts` and surfaced in `App.tsx`.
+**Architecture:** Five new pure functions live in `src/report.ts` (`plateaus`, `outlierDates`, `bpDerived`, `bpPeriodAverage`, `bpCategorySwedish`/`bpCategoryAha`/`longestElevatedRun` and their supporting constants) — all framework-free, unit-tested directly with Vitest. Four existing chart components under `src/components/charts/` (`MetricChart`, `CarbsChart`, `RangeMetricChart`, `BloodPressureChart`) consume them to render plateau overlays, outlier call-outs, and (for `BloodPressureChart`) the category strip; a new `src/components/charts/PulsePressureChart.tsx` renders the pulse pressure/MAP panel. Two small shared rendering helpers (`outlierDot`, `OutlierNote`) live in a new `src/components/charts/outlierHelpers.tsx` and are reused across all of them. `electron/appleHealthParser.ts` gets a new plausibility-bounds table applied inline in the existing parse loop, with a new `implausible` diagnostics counter threaded through `src/shared/types.ts` and surfaced in `src/App.tsx`.
 
 **Tech Stack:** React 18 + TypeScript, Recharts (`Line`'s `type="stepAfter"` for plateau overlays, custom `dot` render-props and custom `Bar` `shape` functions for outlier markers), Vitest for pure-function tests.
 
@@ -12,7 +12,7 @@
 
 - No browser/e2e verification in this project — verify with `npx tsc -p tsconfig.json` (renderer; covers `src/`), `npx tsc -p tsconfig.electron.json` (covers `electron/` and `src/shared/`), and `npm test` (Vitest). Only run electron tsc for tasks touching `electron/` or `src/shared/types.ts`.
 - Design source of truth: `docs/design/chart_analysis.md` — every threshold, function signature, and color below is copied from it verbatim.
-- Follow existing file conventions: `report.ts` functions are exported pure functions with no React/Electron imports; chart components in `App.tsx` follow the existing `printLayout`-branching pattern (`useContext(PrintLayoutContext)`, a `chart(width?, height?)` closure, `data-pdf-chart-ready="true"` in print mode, `ResponsiveContainer` otherwise).
+- Follow existing file conventions: `report.ts` functions are exported pure functions with no React/Electron imports; chart components under `src/components/charts/` follow the existing `printLayout`-branching pattern (`useContext(PrintLayoutContext)`, a `chart(width?, height?)` closure, `data-pdf-chart-ready="true"` in print mode, `ResponsiveContainer` otherwise).
 - Commit after each task.
 
 ---
@@ -22,7 +22,7 @@
 **Files:**
 - Modify: `src/shared/types.ts:36-43` (`ImportDiagnostics`)
 - Modify: `electron/appleHealthParser.ts`
-- Modify: `src/App.tsx:2056-2065` (diagnostics section)
+- Modify: `src/App.tsx:376-386` (diagnostics section)
 - Test: `tests/appleHealthParser.test.ts`
 
 **Interfaces:**
@@ -313,17 +313,9 @@ Expected: FAIL — `outlierDates is not a function` (or not exported).
 
 - [ ] **Step 3: Implement `outlierDates()`**
 
-Add to `src/report.ts`, after `dataSpan()`:
+Add to `src/report.ts`, after `dataSpan()`. Reuses the exported `quantile(sorted, p)` helper that already lives in this file (used by `boundsOf`) instead of duplicating it:
 
 ```ts
-function quantileOf(sorted: number[], p: number) {
-  const i = p * (sorted.length - 1);
-  const lo = Math.floor(i),
-    hi = Math.ceil(i);
-  return lo === hi
-    ? sorted[lo]
-    : sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo);
-}
 // Tukey fences (1.5x IQR) — flags a day as statistically unusual without
 // excluding it; distinct from the parser's physiological-plausibility filter,
 // which excludes data before it ever reaches this function.
@@ -332,8 +324,8 @@ export function outlierDates(
 ): Set<string> {
   if (!rows.length) return new Set();
   const sorted = rows.map((r) => r.value).sort((a, b) => a - b);
-  const q1 = quantileOf(sorted, 0.25);
-  const q3 = quantileOf(sorted, 0.75);
+  const q1 = quantile(sorted, 0.25);
+  const q3 = quantile(sorted, 0.75);
   const iqr = q3 - q1 || 1;
   const lower = q1 - iqr * 1.5;
   const upper = q3 + iqr * 1.5;
@@ -825,75 +817,39 @@ git commit -m "Add Swedish/AHA BP category schemes and longestElevatedRun() to r
 ### Task 6: Plateau overlay rendering (`MetricChart`, `CarbsChart`)
 
 **Files:**
-- Modify: `src/App.tsx`
+- Modify: `src/report.ts`
+- Modify: `src/components/charts/MetricChart.tsx`
+- Modify: `src/components/charts/CarbsChart.tsx`
 
 **Interfaces:**
+- Produces: `plateauMetrics: Metric[]` (`src/report.ts`)
 - Consumes: `plateaus()` (Task 3)
 
-- [ ] **Step 1: Import `Line` and `plateaus`**
+- [ ] **Step 1: Add the `plateauMetrics` constant to `report.ts`**
 
-In `src/App.tsx`, change the recharts import (lines 11-22):
+In `src/report.ts`, change:
 
-```tsx
-import {
-  Area,
-  AreaChart,
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+```ts
+export const totalsMetrics: Metric[] = [
+  "steps",
+  "distance",
+  "activeEnergy",
+  ...nutritionMetrics,
+];
+
+export function quantile(sorted: number[], p: number) {
 ```
 
 to:
 
-```tsx
-import {
-  Area,
-  AreaChart,
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-```
-
-and change the `./report` import (lines 24-38) to add `plateaus`:
-
-```tsx
-import {
-  colorsByMetric,
-  daily,
-  dailyStats,
-  dailyTotals,
-  dataSpan,
-  decimalsByMetric,
-  filtered,
-  format,
-  labels,
-  latest,
-  metricGroups,
-  change,
-  median,
-  plateaus,
-} from "./report";
-```
-
-- [ ] **Step 2: Add the `plateauMetrics` constant**
-
-After the existing `totalsMetrics` constant (`src/App.tsx:68-73`), add:
-
-```tsx
-const plateauMetrics: Metric[] = [
+```ts
+export const totalsMetrics: Metric[] = [
+  "steps",
+  "distance",
+  "activeEnergy",
+  ...nutritionMetrics,
+];
+export const plateauMetrics: Metric[] = [
   "steps",
   "activeEnergy",
   "distance",
@@ -904,24 +860,68 @@ const plateauMetrics: Metric[] = [
   "fat",
   "weight",
 ];
+
+export function quantile(sorted: number[], p: number) {
 ```
 
-- [ ] **Step 3: Overlay the plateau line in `MetricChart`**
+- [ ] **Step 2: Import `Line` and `plateaus`/`plateauMetrics` in `MetricChart`**
 
-In `MetricChart` (`src/App.tsx:391-445`), change:
+In `src/components/charts/MetricChart.tsx`, change:
 
 ```tsx
-  const rows = daily(
-    records,
-    metric,
-    totalsMetrics.includes(metric) ? "total" : "average",
-  );
-  if (!rows.length)
-    return (
-      <div className="empty small">
-        No {labels[metric].toLowerCase()} records in this period.
-      </div>
-    );
+import { useContext } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { HealthData, Metric } from "../../shared/types";
+import {
+  colorsByMetric,
+  daily,
+  format,
+  labels,
+  totalsMetrics,
+  walkingMetrics,
+} from "../../report";
+```
+
+to:
+
+```tsx
+import { useContext } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { HealthData, Metric } from "../../shared/types";
+import {
+  colorsByMetric,
+  daily,
+  format,
+  labels,
+  plateauMetrics,
+  plateaus,
+  totalsMetrics,
+  walkingMetrics,
+} from "../../report";
+```
+
+- [ ] **Step 3: Compute and overlay the plateau line in `MetricChart`**
+
+In `src/components/charts/MetricChart.tsx`, change:
+
+```tsx
   const values = rows.map((row) => row.value);
   const axisMin = niceAxisMin(Math.min(...values), Math.max(...values));
   const chart = (width?: number, height?: number) => (
@@ -931,17 +931,6 @@ In `MetricChart` (`src/App.tsx:391-445`), change:
 to:
 
 ```tsx
-  const rows = daily(
-    records,
-    metric,
-    totalsMetrics.includes(metric) ? "total" : "average",
-  );
-  if (!rows.length)
-    return (
-      <div className="empty small">
-        No {labels[metric].toLowerCase()} records in this period.
-      </div>
-    );
   const values = rows.map((row) => row.value);
   const axisMin = niceAxisMin(Math.min(...values), Math.max(...values));
   const plateauRows = plateauMetrics.includes(metric)
@@ -956,7 +945,7 @@ to:
     <AreaChart data={chartRows} width={width} height={height}>
 ```
 
-and change (still within `MetricChart`):
+and change:
 
 ```tsx
         <Area
@@ -996,7 +985,42 @@ to:
 
 - [ ] **Step 4: Overlay the total-carbs plateau line in `CarbsChart`**
 
-In `CarbsChart` (`src/App.tsx:576-654`), change:
+In `src/components/charts/CarbsChart.tsx`, change the recharts and report imports:
+
+```tsx
+import { useContext } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { HealthData } from "../../shared/types";
+import { colorsByMetric, daily, format } from "../../report";
+```
+
+to:
+
+```tsx
+import { useContext } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { HealthData } from "../../shared/types";
+import { colorsByMetric, daily, format, plateaus } from "../../report";
+```
+
+change:
 
 ```tsx
   if (!rows.length)
@@ -1076,7 +1100,7 @@ Expected: no errors.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/App.tsx
+git add src/report.ts src/components/charts/MetricChart.tsx src/components/charts/CarbsChart.tsx
 git commit -m "Render plateau overlays on noisy-metric and carbs charts"
 ```
 
@@ -1085,64 +1109,26 @@ git commit -m "Render plateau overlays on noisy-metric and carbs charts"
 ### Task 7: Outlier call-out rendering (`MetricChart`, `RangeMetricChart`, `BloodPressureChart`, `CarbsChart`)
 
 **Files:**
-- Modify: `src/App.tsx`
+- Create: `src/components/charts/outlierHelpers.tsx`
+- Modify: `src/components/charts/bpChartShapes.tsx`
+- Modify: `src/components/charts/MetricChart.tsx`
+- Modify: `src/components/charts/RangeMetricChart.tsx`
+- Modify: `src/components/charts/CarbsChart.tsx`
+- Modify: `src/components/charts/BloodPressureChart.tsx`
 
 **Interfaces:**
 - Consumes: `outlierDates()` (Task 2)
-- Produces (new shared helpers, reused by Task 8): `outlierDot(outliers, color)`, `<OutlierNote>`
-- Modifies (backward-compatible, optional 5th param): `bpRangeBarShape()`
+- Produces (new shared helpers, reused by Task 8): `outlierDot(outliers, color)`, `<OutlierNote>` (`src/components/charts/outlierHelpers.tsx`)
+- Modifies (backward-compatible, optional 5th param): `bpRangeBarShape()` (`src/components/charts/bpChartShapes.tsx`)
 
-- [ ] **Step 1: Import `outlierDates`**
+- [ ] **Step 1: Create `outlierHelpers.tsx`**
 
-In `src/App.tsx`, change the `./report` import (as left by Task 6):
-
-```tsx
-import {
-  colorsByMetric,
-  daily,
-  dailyStats,
-  dailyTotals,
-  dataSpan,
-  decimalsByMetric,
-  filtered,
-  format,
-  labels,
-  latest,
-  metricGroups,
-  change,
-  median,
-  plateaus,
-} from "./report";
-```
-
-to:
+Create `src/components/charts/outlierHelpers.tsx`:
 
 ```tsx
-import {
-  colorsByMetric,
-  daily,
-  dailyStats,
-  dailyTotals,
-  dataSpan,
-  decimalsByMetric,
-  filtered,
-  format,
-  labels,
-  latest,
-  metricGroups,
-  change,
-  median,
-  plateaus,
-  outlierDates,
-} from "./report";
-```
+import { format, formatDate } from "../../report";
 
-- [ ] **Step 2: Add the shared `outlierDot` and `OutlierNote` helpers**
-
-Add after `formatDate()` (`src/App.tsx:94-96`):
-
-```tsx
-function outlierDot(outliers: Set<string>, color: string) {
+export function outlierDot(outliers: Set<string>, color: string) {
   return (props: any) => {
     const { cx, cy, payload } = props;
     if (!payload || !outliers.has(payload.date)) return <g />;
@@ -1151,7 +1137,7 @@ function outlierDot(outliers: Set<string>, color: string) {
     );
   };
 }
-function OutlierNote({
+export function OutlierNote({
   label,
   outliers,
   rows,
@@ -1177,12 +1163,12 @@ function OutlierNote({
 }
 ```
 
-- [ ] **Step 3: Extend `bpRangeBarShape` with an optional outlier ring**
+- [ ] **Step 2: Extend `bpRangeBarShape` with an optional outlier ring**
 
-In `bpRangeBarShape` (`src/App.tsx:655-697`), change:
+In `src/components/charts/bpChartShapes.tsx`, change:
 
-```ts
-function bpRangeBarShape(
+```tsx
+export function bpRangeBarShape(
   color: string,
   lowKey: string,
   highKey: string,
@@ -1229,8 +1215,8 @@ function bpRangeBarShape(
 
 to:
 
-```ts
-function bpRangeBarShape(
+```tsx
+export function bpRangeBarShape(
   color: string,
   lowKey: string,
   highKey: string,
@@ -1290,9 +1276,50 @@ function bpRangeBarShape(
 }
 ```
 
-- [ ] **Step 4: Apply outlier marking in `MetricChart`**
+- [ ] **Step 3: Apply outlier marking in `MetricChart`**
 
-In `MetricChart`, change:
+In `src/components/charts/MetricChart.tsx`, change the report import (as left by Task 6):
+
+```tsx
+import {
+  colorsByMetric,
+  daily,
+  format,
+  labels,
+  plateauMetrics,
+  plateaus,
+  totalsMetrics,
+  walkingMetrics,
+} from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { RangeMetricChart } from "./RangeMetricChart";
+import { CarbsChart } from "./CarbsChart";
+```
+
+to:
+
+```tsx
+import {
+  colorsByMetric,
+  daily,
+  decimalsByMetric,
+  format,
+  labels,
+  outlierDates,
+  plateauMetrics,
+  plateaus,
+  totalsMetrics,
+  walkingMetrics,
+} from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { RangeMetricChart } from "./RangeMetricChart";
+import { CarbsChart } from "./CarbsChart";
+import { outlierDot, OutlierNote } from "./outlierHelpers";
+```
+
+change (as left by Task 6):
 
 ```tsx
   const plateauRows = plateauMetrics.includes(metric)
@@ -1316,6 +1343,7 @@ change:
           fill={`url(#fill-${metric})`}
           isAnimationActive={!printLayout}
         />
+        {plateauRows.length > 0 && (
 ```
 
 to:
@@ -1330,11 +1358,14 @@ to:
           isAnimationActive={!printLayout}
           dot={outlierDot(outliers, color)}
         />
+        {plateauRows.length > 0 && (
 ```
 
 and change the non-print return:
 
 ```tsx
+  if (printLayout)
+    return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
   return (
     <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
       {chart()}
@@ -1346,6 +1377,8 @@ and change the non-print return:
 to:
 
 ```tsx
+  if (printLayout)
+    return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
   return (
     <>
       <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
@@ -1362,17 +1395,39 @@ to:
 }
 ```
 
-- [ ] **Step 5: Apply outlier marking in `RangeMetricChart`**
+- [ ] **Step 4: Apply outlier marking in `RangeMetricChart`**
 
-In `RangeMetricChart` (`src/App.tsx:471-551`), change:
+In `src/components/charts/RangeMetricChart.tsx`, change:
 
 ```tsx
-  if (!rows.length)
-    return (
-      <div className="empty small">
-        No {labels[metric].toLowerCase()} records in this period.
-      </div>
-    );
+import type { HealthData, Metric } from "../../shared/types";
+import { colorsByMetric, dailyStats, format, labels } from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { bpRangeBarShape } from "./bpChartShapes";
+```
+
+to:
+
+```tsx
+import type { HealthData, Metric } from "../../shared/types";
+import {
+  colorsByMetric,
+  dailyStats,
+  decimalsByMetric,
+  format,
+  labels,
+  outlierDates,
+} from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { bpRangeBarShape } from "./bpChartShapes";
+import { OutlierNote } from "./outlierHelpers";
+```
+
+change:
+
+```tsx
   const overallAverage =
     rows.reduce((total, row) => total + row.average, 0) / rows.length;
   const axisMin = niceAxisMin(
@@ -1391,12 +1446,6 @@ In `RangeMetricChart` (`src/App.tsx:471-551`), change:
 to:
 
 ```tsx
-  if (!rows.length)
-    return (
-      <div className="empty small">
-        No {labels[metric].toLowerCase()} records in this period.
-      </div>
-    );
   const overallAverage =
     rows.reduce((total, row) => total + row.average, 0) / rows.length;
   const axisMin = niceAxisMin(
@@ -1483,9 +1532,31 @@ to:
 }
 ```
 
-- [ ] **Step 6: Apply outlier marking in `CarbsChart`**
+- [ ] **Step 5: Apply outlier marking in `CarbsChart`**
 
-In `CarbsChart`, change:
+In `src/components/charts/CarbsChart.tsx`, change the report import (as left by Task 6):
+
+```tsx
+import { colorsByMetric, daily, format, plateaus } from "../../report";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+```
+
+to:
+
+```tsx
+import {
+  colorsByMetric,
+  daily,
+  decimalsByMetric,
+  format,
+  outlierDates,
+  plateaus,
+} from "../../report";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { outlierDot, OutlierNote } from "./outlierHelpers";
+```
+
+change (as left by Task 6):
 
 ```tsx
   const plateauRows = plateaus(records, "carbs", "total");
@@ -1510,6 +1581,7 @@ change:
         fill="url(#fill-carbs-other)"
         isAnimationActive={!printLayout}
       />
+      {plateauRows.length > 0 && (
 ```
 
 to:
@@ -1525,6 +1597,7 @@ to:
         isAnimationActive={!printLayout}
         dot={outlierDot(outliers, colorsByMetric.carbs)}
       />
+      {plateauRows.length > 0 && (
 ```
 
 and change the final return:
@@ -1567,9 +1640,32 @@ to:
 }
 ```
 
-- [ ] **Step 7: Apply outlier marking in `BloodPressureChart`**
+- [ ] **Step 6: Apply outlier marking in `BloodPressureChart`**
 
-In `BloodPressureChart` (`src/App.tsx:728-885`), change:
+In `src/components/charts/BloodPressureChart.tsx`, change:
+
+```tsx
+import type { HealthData } from "../../shared/types";
+import { colorsByMetric, dailyStats, format } from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { coverageNote } from "../TableNotes";
+import { bpRangeBarShape } from "./bpChartShapes";
+```
+
+to:
+
+```tsx
+import type { HealthData } from "../../shared/types";
+import { colorsByMetric, dailyStats, format, outlierDates } from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { coverageNote } from "../TableNotes";
+import { bpRangeBarShape } from "./bpChartShapes";
+import { OutlierNote } from "./outlierHelpers";
+```
+
+change:
 
 ```tsx
   const lows = rows
@@ -1762,15 +1858,15 @@ to:
 }
 ```
 
-- [ ] **Step 8: Type-check**
+- [ ] **Step 7: Type-check**
 
 Run: `npx tsc -p tsconfig.json`
 Expected: no errors.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/App.tsx
+git add src/components/charts/outlierHelpers.tsx src/components/charts/bpChartShapes.tsx src/components/charts/MetricChart.tsx src/components/charts/RangeMetricChart.tsx src/components/charts/CarbsChart.tsx src/components/charts/BloodPressureChart.tsx
 git commit -m "Add outlier call-outs across trend, range, carbs, and BP charts"
 ```
 
@@ -1779,46 +1875,37 @@ git commit -m "Add outlier call-outs across trend, range, carbs, and BP charts"
 ### Task 8: Pulse pressure / MAP panel
 
 **Files:**
+- Create: `src/components/charts/PulsePressureChart.tsx`
 - Modify: `src/App.tsx`
 
 **Interfaces:**
 - Consumes: `bpDerived()` (Task 4), `outlierDates()` (Task 2), `outlierDot`/`OutlierNote` (Task 7)
+- Produces: `PulsePressureChart` component (`src/components/charts/PulsePressureChart.tsx`)
 
-- [ ] **Step 1: Import `bpDerived`**
+- [ ] **Step 1: Create `PulsePressureChart.tsx`**
 
-In `src/App.tsx`, change the `./report` import (as left by Task 7):
-
-```tsx
-  median,
-  plateaus,
-  outlierDates,
-} from "./report";
-```
-
-to:
+Create `src/components/charts/PulsePressureChart.tsx`. The `PULSE_PRESSURE_COLOR`/`MAP_COLOR` constants live locally in this file rather than in `chartMath.ts`, since nothing else needs them:
 
 ```tsx
-  median,
-  plateaus,
-  outlierDates,
-  bpDerived,
-} from "./report";
-```
+import { useContext } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { HealthData } from "../../shared/types";
+import { bpDerived, format, outlierDates } from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { outlierDot, OutlierNote } from "./outlierHelpers";
 
-- [ ] **Step 2: Add the fixed derived-metric colors**
-
-After the existing color constants (`src/App.tsx:920-924`, right after `DEFAULT_SHADE_COLOR`), add:
-
-```ts
 const PULSE_PRESSURE_COLOR = "#5c5f66";
 const MAP_COLOR = "#0b7285";
-```
 
-- [ ] **Step 3: Add `PulsePressureTooltip` and `PulsePressureChart`**
-
-Add immediately after `BloodPressureChart` (after `src/App.tsx:885`, before `DayTrace`):
-
-```tsx
 function PulsePressureTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
@@ -1841,7 +1928,7 @@ function PulsePressureTooltip({ active, payload, label }: any) {
     </div>
   );
 }
-function PulsePressureChart({ records }: { records: HealthData["records"] }) {
+export function PulsePressureChart({ records }: { records: HealthData["records"] }) {
   const printLayout = useContext(PrintLayoutContext);
   const rows = bpDerived(records);
   if (!rows.length)
@@ -1925,9 +2012,26 @@ function PulsePressureChart({ records }: { records: HealthData["records"] }) {
 }
 ```
 
-- [ ] **Step 4: Render the panel in the dashboard**
+- [ ] **Step 2: Import and render the panel in `App.tsx`**
 
-In `App()`'s dashboard loop (`src/App.tsx:2011-2013`), change:
+In `src/App.tsx`, change:
+
+```tsx
+import { MetricChart } from "./components/charts/MetricChart";
+import { BloodPressureChart } from "./components/charts/BloodPressureChart";
+import { coverageNote } from "./components/TableNotes";
+```
+
+to:
+
+```tsx
+import { MetricChart } from "./components/charts/MetricChart";
+import { BloodPressureChart } from "./components/charts/BloodPressureChart";
+import { PulsePressureChart } from "./components/charts/PulsePressureChart";
+import { coverageNote } from "./components/TableNotes";
+```
+
+and, in the dashboard loop (`src/App.tsx:331-333`), change:
 
 ```tsx
               {group.title === "Vitals" && hasBloodPressure && (
@@ -1946,15 +2050,15 @@ to:
               )}{" "}
 ```
 
-- [ ] **Step 5: Type-check**
+- [ ] **Step 3: Type-check**
 
 Run: `npx tsc -p tsconfig.json`
 Expected: no errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/App.tsx
+git add src/components/charts/PulsePressureChart.tsx src/App.tsx
 git commit -m "Add pulse pressure / MAP chart panel"
 ```
 
@@ -1963,29 +2067,57 @@ git commit -m "Add pulse pressure / MAP chart panel"
 ### Task 9: Blood pressure category strip (Swedish/AHA toggle, period-average badge, sustained-run call-out)
 
 **Files:**
-- Modify: `src/App.tsx`
+- Modify: `src/components/charts/BloodPressureChart.tsx`
 - Modify: `src/styles.css`
 
 **Interfaces:**
-- Consumes: `bpDerived()`, `bpPeriodAverage()` (Task 4), `bpCategorySwedish`/`bpCategoryAha`/`bpCategoryColorsSwedish`/`bpCategoryColorsAha`/`bpCategoryOrderSwedish`/`bpCategoryOrderAha`/`longestElevatedRun`/`BpScheme` (Task 5), `formatDate()` (existing)
+- Consumes: `bpDerived()`, `bpPeriodAverage()` (Task 4), `bpCategorySwedish`/`bpCategoryAha`/`bpCategoryColorsSwedish`/`bpCategoryColorsAha`/`bpCategoryOrderSwedish`/`bpCategoryOrderAha`/`longestElevatedRun`/`BpScheme` (Task 5), `formatDate()` (existing, `src/report.ts`)
 
-- [ ] **Step 1: Import the new report.ts names**
+This task assumes Task 7 Step 6 (outlier marking in `BloodPressureChart`) has already landed — it builds directly on the `sOutliers`/`dOutliers`/`chartRows` and `OutlierNote` code that step adds.
 
-In `src/App.tsx`, change the `./report` import (as left by Task 8):
+- [ ] **Step 1: Import the new report.ts names and `useState`**
+
+In `src/components/charts/BloodPressureChart.tsx`, change the imports (as left by Task 7 Step 6):
 
 ```tsx
-  median,
-  plateaus,
-  outlierDates,
-  bpDerived,
-} from "./report";
+import { useContext } from "react";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { HealthData } from "../../shared/types";
+import { colorsByMetric, dailyStats, format, outlierDates } from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { coverageNote } from "../TableNotes";
+import { bpRangeBarShape } from "./bpChartShapes";
+import { OutlierNote } from "./outlierHelpers";
 ```
 
 to:
 
 ```tsx
-  median,
-  plateaus,
+import { useContext, useState } from "react";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { HealthData } from "../../shared/types";
+import {
+  colorsByMetric,
+  dailyStats,
+  format,
+  formatDate,
   outlierDates,
   bpDerived,
   bpPeriodAverage,
@@ -1996,16 +2128,21 @@ to:
   bpCategoryColorsAha,
   bpCategoryOrderAha,
   longestElevatedRun,
-} from "./report";
-import type { BpScheme } from "./report";
+} from "../../report";
+import type { BpScheme } from "../../report";
+import { niceAxisMin } from "../../chartMath";
+import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { coverageNote } from "../TableNotes";
+import { bpRangeBarShape } from "./bpChartShapes";
+import { OutlierNote } from "./outlierHelpers";
 ```
 
-- [ ] **Step 2: Add classification state and derived values to `BloodPressureChart`**
+- [ ] **Step 2: Add classification state**
 
 In `BloodPressureChart`, change the function's opening:
 
 ```tsx
-function BloodPressureChart({
+export function BloodPressureChart({
   records,
   from,
   to,
@@ -2022,7 +2159,7 @@ function BloodPressureChart({
 to:
 
 ```tsx
-function BloodPressureChart({
+export function BloodPressureChart({
   records,
   from,
   to,
@@ -2039,7 +2176,7 @@ function BloodPressureChart({
 
 - [ ] **Step 3: Compute category data after the existing outlier block**
 
-Immediately after the `chartRows` block added in Task 7 Step 7 (the `sOutlier`/`dOutlier` mapping, right before `const chart = (width?: number, height?: number) => (`), add:
+Immediately after the `chartRows` block added in Task 7 Step 6 (the `sOutlier`/`dOutlier` mapping, right before `const chart = (width?: number, height?: number) => (`), add:
 
 ```tsx
   const derivedDays = bpDerived(records);
@@ -2080,7 +2217,7 @@ Immediately after the `chartRows` block added in Task 7 Step 7 (the `sOutlier`/`
 
 - [ ] **Step 4: Render the toggle, badge, run call-out, strip, and summary**
 
-In `BloodPressureChart`'s return, change the block after the `bp-legend` div and the `OutlierNote`s added in Task 7 Step 7 — i.e. change:
+In `BloodPressureChart`'s return, change the block after the `bp-legend` div and the `OutlierNote`s added in Task 7 Step 6 — i.e. change:
 
 ```tsx
       {!printLayout && (
@@ -2284,7 +2421,7 @@ Expected: no errors.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/App.tsx src/styles.css
+git add src/components/charts/BloodPressureChart.tsx src/styles.css
 git commit -m "Add Swedish/AHA BP category strip with period-average badge and sustained-run call-out"
 ```
 
