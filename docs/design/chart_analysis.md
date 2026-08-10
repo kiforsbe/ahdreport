@@ -18,9 +18,10 @@ applied uniformly:
    applied across every chart type.
 3. **Blood pressure derived metrics** — pulse pressure and mean arterial pressure
    (MAP), computed from data already imported.
-4. **Blood pressure category strip** — a day-by-day category view alongside the
-   existing BP range chart, with a Swedish/AHA classification toggle (Swedish by
-   default).
+4. **Blood pressure category strip** — a period-average headline badge and
+   sustained-run call-out (since hypertension is a sustained-pattern diagnosis, not
+   a single-reading one), backed by a day-by-day distribution strip, alongside the
+   existing BP range chart. Swedish/AHA classification toggle, Swedish by default.
 
 A fifth, unrelated-but-concurrent change tightens data quality at the source: the
 Apple Health parser gets physiological plausibility bounds, so a sensor glitch (a
@@ -247,21 +248,86 @@ are independent of each other: six Swedish bands and five AHA bands don't need
 color-matching at corresponding indices, only a consistent light-to-dark,
 green-to-red escalation within each.
 
+### Diagnosis is a sustained-pattern question, not a single-day one
+
+Neither office nor home BP protocols diagnose hypertension from one reading.
+Clinic guidelines require elevated readings across at least two separate visits;
+home-monitoring protocols — the relevant case here, since Apple Health BP data
+comes from a home cuff or self-logging — average 7 consecutive days (dropping the
+first) before comparing to a threshold, precisely because a single day can be
+thrown off by poor sleep, stress, caffeine, or measurement noise. A day-by-day strip
+grading each day in isolation risks reading as "this day = diagnosed hypertensive,"
+which overstates what any one reading means. Two things follow from that, both
+below: the day-strip is kept, but now explicitly secondary to a period-level
+headline, and a persistence signal is surfaced directly.
+
+### Period-average badge
+
+The panel's headline is a **period-average badge**, not a day cell: average every
+day's systolic value across the whole selected report range, average every day's
+diastolic value the same way (each day weighted equally — matching the
+home-monitoring protocol's day-level averaging, not a raw per-reading average), and
+classify that single pair through the same `bpCategorySwedish` / `bpCategoryAha`
+functions defined above. Reusing the existing graded bands avoids maintaining a
+second threshold table; the panel's own copy states plainly that this is an
+approximation of the formal home-diagnostic cutoff (Swedish: ≥135/85 mmHg average =
+hypertensive) applied to the imported data, not a clinical diagnosis. New pure
+function:
+
+```ts
+export function bpPeriodAverage(
+  days: { systolic: number; diastolic: number }[],
+): { systolic: number; diastolic: number } | undefined
+```
+
+Takes `bpDerived()`'s output (or any subset of it); returns `undefined` for an empty
+input (no BP data in the period at all) rather than `NaN`.
+
+### Sustained-run call-out
+
+Separately from the badge, the panel calls out the **longest run of consecutive
+covered days** — consecutive by position in the per-day series; gaps in the
+underlying data don't break a run, since the strip itself only shows days that have
+data — sitting at or above the hypertension-onset band (Grade 1 hypertension for
+Swedish, Stage 1 for AHA). Below a 3-day minimum nothing is shown: a one- or two-day
+blip is closer to the outlier case (section 2) than a sustained pattern and doesn't
+warrant its own call-out text. New pure function:
+
+```ts
+export function longestElevatedRun<T extends string>(
+  days: { date: string; category: T }[],
+  order: T[],
+  floor: T,
+): { start: string; end: string; length: number } | undefined
+```
+
+`days` is the same per-day `{date, category}` array the strip renders (computed
+once per scheme — `bpDerived()`'s rows run through `bpCategorySwedish`/
+`bpCategoryAha`, and that one categorized array feeds both the strip's cells and
+this function, no duplicate classification pass); `order` is whichever
+`bpCategoryOrder*` matches the active scheme; `floor` is that scheme's
+hypertension-onset category. Returns the longest run whose category rank (via
+`order.indexOf`) is at or above `floor`'s rank, or `undefined` if nothing reaches the
+3-day minimum.
+
 ### Rendering
 
-A thin row of colored day-cells (plain HTML/CSS, not SVG/Recharts — simpler than
-`DailyTotalBar` since there's no magnitude to encode, only a category color) rendered
-directly under the existing `BloodPressureChart`, inside its existing panel wrapper,
-with a small scheme toggle ("Swedish" / "AHA", Swedish selected by default) above the
-strip. Only days with BP data get a cell — no gray placeholder cells for gaps,
-consistent with how the rest of the app treats missing days. Each cell's `title`
-attribute shows the date and category on hover. Below the strip, a one-line text
-summary: the percentage of days (of those with BP data) in each category present in
-the period, e.g. "58% Normal · 24% High normal · 18% Grade 1 hypertension", using
-whichever `bpCategoryOrder*` matches the active scheme so the breakdown always reads
-least-to-most severe. Toggling the scheme recomputes the strip and summary line from
-the same `bpDerived()` output already in memory — no re-fetch, no re-parse. The
-toggle is local UI state, not persisted between sessions, and doesn't affect
+Layout, top to bottom, all under the existing `BloodPressureChart` panel: the scheme
+toggle ("Swedish" / "AHA", Swedish selected by default), the period-average badge
+with its diagnostic-approximation caveat, the sustained-run call-out line (e.g.
+"Sustained: 12 consecutive days at Grade 1 hypertension or higher (Jan 14–25).",
+omitted entirely when `undefined`), then the day-strip itself. The strip is a thin
+row of colored day-cells (plain HTML/CSS, not SVG/Recharts — simpler than
+`DailyTotalBar` since there's no magnitude to encode, only a category color); only
+days with BP data get a cell, consistent with how the rest of the app treats missing
+days, and each cell's `title` attribute shows the date and category on hover. Below
+the strip, a one-line text summary: the percentage of days (of those with BP data)
+in each category present in the period, e.g. "58% Normal · 24% High normal · 18%
+Grade 1 hypertension", using the active scheme's `bpCategoryOrder*` so the breakdown
+always reads least-to-most severe. Toggling the scheme recomputes the badge,
+call-out, strip, and summary line together from the same `bpDerived()` output
+already in memory — no re-fetch, no re-parse. The toggle is local UI state, not
+persisted between sessions, and none of this — badge, call-out, or strip — affects
 CSV/XLSX export, which doesn't carry any of this dashboard-only analysis today.
 
 ## 5. Invalid-data filtering (Apple Health parser)
@@ -349,6 +415,13 @@ warnings.
   hypertension, 165/102 → Grade 2 hypertension, 185/115 → Grade 3 hypertension) and
   AHA (e.g. 118/76 → Normal, 125/78 → Elevated, 135/85 → Stage 1, 145/95 → Stage 2,
   185/125 → Crisis).
+- `bpPeriodAverage()`: a set of per-day systolic/diastolic pairs produces the
+  expected simple mean of each field; an empty input returns `undefined`.
+- `longestElevatedRun()`: a categorized day series with a 4-day run at or above the
+  floor category (surrounded by lower-category days) returns exactly that run's
+  start/end/length; a series where the longest qualifying run is only 2 days
+  returns `undefined` (below the 3-day minimum); a series with no days at or above
+  the floor returns `undefined`.
 - Parser: an injected implausible record (e.g. heart rate far outside 20–300) is
   excluded, `diagnostics.implausible` increments, and the warning appears; a
   boundary-plausible record (e.g. heart rate exactly 20 or 300) is kept, confirming
