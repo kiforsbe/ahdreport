@@ -379,6 +379,10 @@ export function App() {
           {data.diagnostics.unsupported.toLocaleString()} unsupported Apple
           Health record types were safely skipped.
         </span>
+        <span>
+          {data.diagnostics.implausible.toLocaleString()} record(s) were
+          excluded as physiologically implausible.
+        </span>
         {data.diagnostics.warnings.map((warning) => (
           <span key={warning}>{warning}</span>
         ))}

@@ -78,3 +78,42 @@ describe("nutrition records", () => {
     ]);
   });
 });
+
+describe("physiological plausibility filtering", () => {
+  it("excludes implausible vitals readings and counts them in diagnostics", async () => {
+    const xml = `<?xml version="1.0"?><HealthData><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" value="999" startDate="2026-01-06 08:00:00 +0000" endDate="2026-01-06 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" value="62" startDate="2026-01-06 09:00:00 +0000" endDate="2026-01-06 09:00:00 +0000"/></HealthData>`;
+    const result = await parseAppleHealthExport(
+      Buffer.from(xml),
+      "export.xml",
+    );
+    expect(result.records).toEqual([
+      expect.objectContaining({
+        metric: "heartRate",
+        value: 62,
+        unit: "count/min",
+      }),
+    ]);
+    expect(result.diagnostics.implausible).toBe(1);
+    expect(result.diagnostics.warnings).toContain(
+      "1 record(s) were excluded as physiologically implausible.",
+    );
+  });
+  it("keeps boundary-plausible readings", async () => {
+    const xml = `<?xml version="1.0"?><HealthData><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" value="20" startDate="2026-01-06 08:00:00 +0000" endDate="2026-01-06 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" value="300" startDate="2026-01-06 09:00:00 +0000" endDate="2026-01-06 09:00:00 +0000"/></HealthData>`;
+    const result = await parseAppleHealthExport(
+      Buffer.from(xml),
+      "export.xml",
+    );
+    expect(result.records).toHaveLength(2);
+    expect(result.diagnostics.implausible).toBe(0);
+  });
+  it("rejects negative values for any metric", async () => {
+    const xml = `<?xml version="1.0"?><HealthData><Record type="HKQuantityTypeIdentifierStepCount" sourceName="Watch" unit="count" value="-5" startDate="2026-01-06 08:00:00 +0000" endDate="2026-01-06 08:00:00 +0000"/></HealthData>`;
+    const result = await parseAppleHealthExport(
+      Buffer.from(xml),
+      "export.xml",
+    );
+    expect(result.records).toHaveLength(0);
+    expect(result.diagnostics.implausible).toBe(1);
+  });
+});

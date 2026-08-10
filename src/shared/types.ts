@@ -37,6 +37,7 @@ export interface ImportDiagnostics {
   fileName: string;
   imported: number;
   unsupported: number;
+  implausible: number;
   earliest?: string;
   latest?: string;
   warnings: string[];

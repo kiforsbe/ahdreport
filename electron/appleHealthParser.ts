@@ -35,6 +35,23 @@ const typeMap: Record<string, Metric> = {
   HKClinicalTypeIdentifierMedicationRecord: "medication",
 };
 
+const plausibleRanges: Partial<
+  Record<Metric, Partial<Record<string, [number, number]>>>
+> = {
+  heartRate: { "count/min": [20, 300] },
+  restingHeartRate: { "count/min": [20, 300] },
+  bloodPressureSystolic: { mmHg: [60, 250] },
+  bloodPressureDiastolic: { mmHg: [30, 150] },
+  bodyTemperature: { degC: [30, 45], degF: [86, 113] },
+  weight: { kg: [20, 300], lb: [44, 660] },
+};
+function isPlausible(metric: Metric, value: number, unit: string): boolean {
+  if (value < 0) return false;
+  if (metric === "sleep") return value <= 24;
+  const bounds = plausibleRanges[metric]?.[unit];
+  return !bounds || (value >= bounds[0] && value <= bounds[1]);
+}
+
 function attribute(x: unknown): Record<string, string> {
   return (x && typeof x === "object" ? x : {}) as Record<string, string>;
 }
@@ -156,6 +173,7 @@ export async function parseAppleHealthExport(
   const records: HealthRecord[] = [];
   const seen = new Set<string>();
   let unsupported = 0;
+  let implausible = 0;
   for (const raw of Array.isArray(rows) ? rows : [rows]) {
     const r = attribute(raw);
     const metric = typeMap[r.type];
@@ -171,6 +189,10 @@ export async function parseAppleHealthExport(
       continue;
     const date = new Date(timestamp).toISOString();
     const unit = metric === "sleep" ? "hr" : r.unit || "";
+    if (!isPlausible(metric, value, unit)) {
+      implausible++;
+      continue;
+    }
     const key = `${metric}|${date}|${value}|${unit}|${r.sourceName || ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -201,6 +223,7 @@ export async function parseAppleHealthExport(
       fileName,
       imported: records.length,
       unsupported,
+      implausible,
       earliest: dates[0],
       latest: dates.at(-1),
       warnings: [
@@ -208,6 +231,11 @@ export async function parseAppleHealthExport(
           ? []
           : ["No supported medication records were found in this export."]),
         ...(clinicalDataWarning ? [clinicalDataWarning] : []),
+        ...(implausible > 0
+          ? [
+              `${implausible} record(s) were excluded as physiologically implausible.`,
+            ]
+          : []),
       ],
     },
   };
