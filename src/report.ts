@@ -324,6 +324,48 @@ export function plateaus(
   return result;
 }
 
+export interface BpDerivedDay {
+  date: string;
+  unit: string; // "mmHg"
+  systolic: number;
+  diastolic: number;
+  pulsePressure: number; // systolic − diastolic
+  map: number; // diastolic + pulsePressure / 3
+}
+export function bpDerived(records: HealthRecord[]): BpDerivedDay[] {
+  const systolic = new Map(
+    dailyStats(records, "bloodPressureSystolic").map((d) => [d.date, d]),
+  );
+  const diastolic = new Map(
+    dailyStats(records, "bloodPressureDiastolic").map((d) => [d.date, d]),
+  );
+  return [...systolic.keys()]
+    .filter((date) => diastolic.has(date))
+    .sort((a, b) => a.localeCompare(b))
+    .map((date) => {
+      const s = systolic.get(date)!;
+      const d = diastolic.get(date)!;
+      const pulsePressure = s.average - d.average;
+      return {
+        date,
+        unit: s.unit,
+        systolic: s.average,
+        diastolic: d.average,
+        pulsePressure,
+        map: d.average + pulsePressure / 3,
+      };
+    });
+}
+export function bpPeriodAverage(
+  days: { systolic: number; diastolic: number }[],
+): { systolic: number; diastolic: number } | undefined {
+  if (!days.length) return undefined;
+  return {
+    systolic: days.reduce((sum, d) => sum + d.systolic, 0) / days.length,
+    diastolic: days.reduce((sum, d) => sum + d.diastolic, 0) / days.length,
+  };
+}
+
 export const highlights: Metric[] = [
   "weight",
   "heartRate",

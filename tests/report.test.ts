@@ -8,6 +8,8 @@ import {
   labels,
   latest,
   median,
+  bpDerived,
+  bpPeriodAverage,
   metricGroups,
   outlierDates,
   plateaus,
@@ -154,5 +156,51 @@ describe("plateaus", () => {
   });
   it("returns no segments below the 14-day-with-data minimum", () => {
     expect(plateaus(twoRegimeRows.slice(0, 13), "weight")).toEqual([]);
+  });
+});
+
+describe("blood pressure derived metrics", () => {
+  const bpRows: HealthRecord[] = [
+    {
+      metric: "bloodPressureSystolic",
+      date: "2026-01-01T08:00:00.000Z",
+      value: 130,
+      unit: "mmHg",
+    },
+    {
+      metric: "bloodPressureDiastolic",
+      date: "2026-01-01T08:00:00.000Z",
+      value: 80,
+      unit: "mmHg",
+    },
+    {
+      metric: "bloodPressureSystolic",
+      date: "2026-01-02T08:00:00.000Z",
+      value: 120,
+      unit: "mmHg",
+    },
+  ];
+  it("joins systolic/diastolic by date and computes pulse pressure and MAP", () => {
+    const result = bpDerived(bpRows);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      date: "2026-01-01",
+      unit: "mmHg",
+      systolic: 130,
+      diastolic: 80,
+      pulsePressure: 50,
+    });
+    expect(result[0].map).toBeCloseTo(96.667, 2);
+  });
+  it("averages a period of derived days", () => {
+    expect(
+      bpPeriodAverage([
+        { systolic: 130, diastolic: 80 },
+        { systolic: 120, diastolic: 70 },
+      ]),
+    ).toEqual({ systolic: 125, diastolic: 75 });
+  });
+  it("returns undefined for an empty period", () => {
+    expect(bpPeriodAverage([])).toBeUndefined();
   });
 });
