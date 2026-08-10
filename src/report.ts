@@ -366,6 +366,100 @@ export function bpPeriodAverage(
   };
 }
 
+export type BpScheme = "swedish" | "aha";
+
+export type SwedishBpCategory =
+  | "Optimal"
+  | "Normal"
+  | "High normal"
+  | "Grade 1 hypertension"
+  | "Grade 2 hypertension"
+  | "Grade 3 hypertension";
+export function bpCategorySwedish(
+  systolic: number,
+  diastolic: number,
+): SwedishBpCategory {
+  if (systolic >= 180 || diastolic >= 110) return "Grade 3 hypertension";
+  if (systolic >= 160 || diastolic >= 100) return "Grade 2 hypertension";
+  if (systolic >= 140 || diastolic >= 90) return "Grade 1 hypertension";
+  if (systolic >= 130 || diastolic >= 85) return "High normal";
+  if (systolic >= 120 || diastolic >= 80) return "Normal";
+  return "Optimal";
+}
+export const bpCategoryColorsSwedish: Record<SwedishBpCategory, string> = {
+  Optimal: "#2f9e44",
+  Normal: "#66a80f",
+  "High normal": "#f59f00",
+  "Grade 1 hypertension": "#e8590c",
+  "Grade 2 hypertension": "#e03131",
+  "Grade 3 hypertension": "#862e2e",
+};
+export const bpCategoryOrderSwedish: SwedishBpCategory[] = [
+  "Optimal",
+  "Normal",
+  "High normal",
+  "Grade 1 hypertension",
+  "Grade 2 hypertension",
+  "Grade 3 hypertension",
+];
+
+export type AhaBpCategory =
+  | "Normal"
+  | "Elevated"
+  | "Stage 1"
+  | "Stage 2"
+  | "Crisis";
+export function bpCategoryAha(
+  systolic: number,
+  diastolic: number,
+): AhaBpCategory {
+  if (systolic > 180 || diastolic > 120) return "Crisis";
+  if (systolic >= 140 || diastolic >= 90) return "Stage 2";
+  if (systolic >= 130 || diastolic >= 80) return "Stage 1";
+  if (systolic >= 120 && diastolic < 80) return "Elevated";
+  return "Normal";
+}
+export const bpCategoryColorsAha: Record<AhaBpCategory, string> = {
+  Normal: "#2f9e44",
+  Elevated: "#f59f00",
+  "Stage 1": "#e8590c",
+  "Stage 2": "#e03131",
+  Crisis: "#862e2e",
+};
+export const bpCategoryOrderAha: AhaBpCategory[] = [
+  "Normal",
+  "Elevated",
+  "Stage 1",
+  "Stage 2",
+  "Crisis",
+];
+
+// Longest run of consecutive covered days (by position, not calendar) at or
+// above `floor`'s severity rank in `order`; undefined below a 3-day minimum.
+export function longestElevatedRun<T extends string>(
+  days: { date: string; category: T }[],
+  order: T[],
+  floor: T,
+): { start: string; end: string; length: number } | undefined {
+  const floorRank = order.indexOf(floor);
+  let best: { start: string; end: string; length: number } | undefined;
+  let runStart = -1;
+  for (let i = 0; i <= days.length; i++) {
+    const qualifies =
+      i < days.length && order.indexOf(days[i].category) >= floorRank;
+    if (qualifies) {
+      if (runStart === -1) runStart = i;
+    } else if (runStart !== -1) {
+      const length = i - runStart;
+      if (length >= 3 && (!best || length > best.length)) {
+        best = { start: days[runStart].date, end: days[i - 1].date, length };
+      }
+      runStart = -1;
+    }
+  }
+  return best;
+}
+
 export const highlights: Metric[] = [
   "weight",
   "heartRate",

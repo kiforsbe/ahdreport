@@ -8,8 +8,12 @@ import {
   labels,
   latest,
   median,
+  bpCategoryAha,
+  bpCategoryOrderSwedish,
+  bpCategorySwedish,
   bpDerived,
   bpPeriodAverage,
+  longestElevatedRun,
   metricGroups,
   outlierDates,
   plateaus,
@@ -202,5 +206,61 @@ describe("blood pressure derived metrics", () => {
   });
   it("returns undefined for an empty period", () => {
     expect(bpPeriodAverage([])).toBeUndefined();
+  });
+});
+
+describe("blood pressure categorization", () => {
+  it("classifies Swedish categories at each threshold boundary", () => {
+    expect(bpCategorySwedish(115, 75)).toBe("Optimal");
+    expect(bpCategorySwedish(125, 78)).toBe("Normal");
+    expect(bpCategorySwedish(132, 86)).toBe("High normal");
+    expect(bpCategorySwedish(145, 92)).toBe("Grade 1 hypertension");
+    expect(bpCategorySwedish(165, 102)).toBe("Grade 2 hypertension");
+    expect(bpCategorySwedish(185, 115)).toBe("Grade 3 hypertension");
+  });
+  it("classifies AHA categories at each threshold boundary", () => {
+    expect(bpCategoryAha(118, 76)).toBe("Normal");
+    expect(bpCategoryAha(125, 78)).toBe("Elevated");
+    expect(bpCategoryAha(135, 85)).toBe("Stage 1");
+    expect(bpCategoryAha(145, 95)).toBe("Stage 2");
+    expect(bpCategoryAha(185, 125)).toBe("Crisis");
+  });
+});
+describe("longestElevatedRun", () => {
+  const days = (categories: string[]) =>
+    categories.map((category, i) => ({
+      date: `2026-01-${String(i + 1).padStart(2, "0")}`,
+      category,
+    }));
+  it("finds the longest run at or above the floor category", () => {
+    const series = days([
+      "Normal",
+      "Grade 1 hypertension",
+      "Grade 1 hypertension",
+      "Grade 2 hypertension",
+      "Grade 1 hypertension",
+      "Normal",
+      "Normal",
+    ]);
+    expect(
+      longestElevatedRun(series, bpCategoryOrderSwedish, "Grade 1 hypertension"),
+    ).toEqual({ start: "2026-01-02", end: "2026-01-05", length: 4 });
+  });
+  it("ignores a run shorter than the 3-day minimum", () => {
+    const series = days([
+      "Normal",
+      "Grade 1 hypertension",
+      "Grade 1 hypertension",
+      "Normal",
+    ]);
+    expect(
+      longestElevatedRun(series, bpCategoryOrderSwedish, "Grade 1 hypertension"),
+    ).toBeUndefined();
+  });
+  it("returns undefined when no day reaches the floor category", () => {
+    const series = days(["Optimal", "Normal", "High normal"]);
+    expect(
+      longestElevatedRun(series, bpCategoryOrderSwedish, "Grade 1 hypertension"),
+    ).toBeUndefined();
   });
 });
