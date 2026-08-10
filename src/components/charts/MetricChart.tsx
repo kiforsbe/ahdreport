@@ -13,8 +13,10 @@ import type { HealthData, Metric } from "../../shared/types";
 import {
   colorsByMetric,
   daily,
+  decimalsByMetric,
   format,
   labels,
+  outlierDates,
   plateauMetrics,
   plateaus,
   totalsMetrics,
@@ -24,6 +26,7 @@ import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { RangeMetricChart } from "./RangeMetricChart";
 import { CarbsChart } from "./CarbsChart";
+import { outlierDot, OutlierNote } from "./outlierHelpers";
 
 export function MetricChart({
   metric,
@@ -50,6 +53,7 @@ export function MetricChart({
     );
   const values = rows.map((row) => row.value);
   const axisMin = niceAxisMin(Math.min(...values), Math.max(...values));
+  const outliers = outlierDates(rows);
   const plateauRows = plateauMetrics.includes(metric)
     ? plateaus(records, metric, totalsMetrics.includes(metric) ? "total" : "average")
     : [];
@@ -77,6 +81,7 @@ export function MetricChart({
           strokeWidth={2.5}
           fill={`url(#fill-${metric})`}
           isAnimationActive={!printLayout}
+          dot={outlierDot(outliers, color)}
         />
         {plateauRows.length > 0 && (
           <Line
@@ -93,8 +98,16 @@ export function MetricChart({
   if (printLayout)
     return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
   return (
-    <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
-      {chart()}
-    </ResponsiveContainer>
+    <>
+      <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
+        {chart()}
+      </ResponsiveContainer>
+      <OutlierNote
+        outliers={outliers}
+        rows={rows}
+        unit={rows[0].unit}
+        decimals={decimalsByMetric[metric]}
+      />
+    </>
   );
 }

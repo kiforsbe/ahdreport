@@ -9,11 +9,12 @@ import {
   YAxis,
 } from "recharts";
 import type { HealthData } from "../../shared/types";
-import { colorsByMetric, dailyStats, format } from "../../report";
+import { colorsByMetric, dailyStats, format, outlierDates } from "../../report";
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { coverageNote } from "../TableNotes";
 import { bpRangeBarShape } from "./bpChartShapes";
+import { OutlierNote } from "./outlierHelpers";
 
 function BpTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -109,9 +110,24 @@ export function BloodPressureChart({
     .flatMap((r) => [r.sHigh, r.dHigh])
     .filter((v): v is number => v !== undefined);
   const axisMin = niceAxisMin(Math.min(...lows), Math.max(...highs));
+  const sOutliers = outlierDates(
+    rows
+      .filter((r): r is typeof r & { sAvg: number } => r.sAvg !== undefined)
+      .map((r) => ({ date: r.date, value: r.sAvg })),
+  );
+  const dOutliers = outlierDates(
+    rows
+      .filter((r): r is typeof r & { dAvg: number } => r.dAvg !== undefined)
+      .map((r) => ({ date: r.date, value: r.dAvg })),
+  );
+  const chartRows = rows.map((r) => ({
+    ...r,
+    sOutlier: sOutliers.has(r.date),
+    dOutlier: dOutliers.has(r.date),
+  }));
   const chart = (width?: number, height?: number) => (
     <ComposedChart
-      data={rows}
+      data={chartRows}
       barGap={2}
       barCategoryGap="28%"
       width={width}
@@ -135,6 +151,7 @@ export function BloodPressureChart({
           "sLow",
           "sHigh",
           "sAvg",
+          "sOutlier",
         )}
         isAnimationActive={false}
       />
@@ -152,6 +169,7 @@ export function BloodPressureChart({
           "dLow",
           "dHigh",
           "dAvg",
+          "dOutlier",
         )}
         isAnimationActive={false}
       />
@@ -199,6 +217,28 @@ export function BloodPressureChart({
             ▮ Diastolic (range, avg tick)
           </small>
         </div>
+      )}
+      {!printLayout && (
+        <>
+          <OutlierNote
+            label="Systolic"
+            outliers={sOutliers}
+            rows={rows
+              .filter((r): r is typeof r & { sAvg: number } => r.sAvg !== undefined)
+              .map((r) => ({ date: r.date, value: r.sAvg }))}
+            unit="mmHg"
+            decimals={0}
+          />
+          <OutlierNote
+            label="Diastolic"
+            outliers={dOutliers}
+            rows={rows
+              .filter((r): r is typeof r & { dAvg: number } => r.dAvg !== undefined)
+              .map((r) => ({ date: r.date, value: r.dAvg }))}
+            unit="mmHg"
+            decimals={0}
+          />
+        </>
       )}
     </article>
   );

@@ -10,8 +10,16 @@ import {
   YAxis,
 } from "recharts";
 import type { HealthData } from "../../shared/types";
-import { colorsByMetric, daily, format, plateaus } from "../../report";
+import {
+  colorsByMetric,
+  daily,
+  decimalsByMetric,
+  format,
+  outlierDates,
+  plateaus,
+} from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
+import { outlierDot, OutlierNote } from "./outlierHelpers";
 
 function CarbsTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -60,6 +68,7 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         No carbohydrate records in this period.
       </div>
     );
+  const outliers = outlierDates(rows.map((row) => ({ date: row.date, value: row.carbs })));
   const plateauRows = plateaus(records, "carbs", "total");
   const plateauByDate = new Map(plateauRows.map((row) => [row.date, row.value]));
   const chartRows = rows.map((row) => ({
@@ -99,6 +108,7 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         strokeWidth={2}
         fill="url(#fill-carbs-other)"
         isAnimationActive={!printLayout}
+        dot={outlierDot(outliers, colorsByMetric.carbs)}
       />
       {plateauRows.length > 0 && (
         <Line
@@ -128,6 +138,14 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
             ▮ Other carbohydrates
           </small>
         </div>
+      )}
+      {!printLayout && (
+        <OutlierNote
+          outliers={outliers}
+          rows={rows.map((row) => ({ date: row.date, value: row.carbs }))}
+          unit={rows[0].unit}
+          decimals={decimalsByMetric.carbs}
+        />
       )}
     </>
   );

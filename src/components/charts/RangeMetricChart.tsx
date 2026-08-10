@@ -10,10 +10,18 @@ import {
   YAxis,
 } from "recharts";
 import type { HealthData, Metric } from "../../shared/types";
-import { colorsByMetric, dailyStats, format, labels } from "../../report";
+import {
+  colorsByMetric,
+  dailyStats,
+  decimalsByMetric,
+  format,
+  labels,
+  outlierDates,
+} from "../../report";
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { bpRangeBarShape } from "./bpChartShapes";
+import { OutlierNote } from "./outlierHelpers";
 
 function RangeMetricTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -75,9 +83,16 @@ export function RangeMetricChart({
     Math.min(...rows.map((row) => row.low)),
     Math.max(...rows.map((row) => row.high)),
   );
+  const outliers = outlierDates(
+    rows.map((row) => ({ date: row.date, value: row.average })),
+  );
+  const chartRows = rows.map((row) => ({
+    ...row,
+    isOutlier: outliers.has(row.date),
+  }));
   const chart = (width?: number, height?: number) => (
     <ComposedChart
-      data={rows}
+      data={chartRows}
       barCategoryGap="28%"
       width={width}
       height={height}
@@ -96,7 +111,7 @@ export function RangeMetricChart({
       <Bar
         dataKey="range"
         stackId={metric}
-        shape={bpRangeBarShape(color, "low", "high", "average")}
+        shape={bpRangeBarShape(color, "low", "high", "average", "isOutlier")}
         isAnimationActive={false}
       />
     </ComposedChart>
@@ -118,6 +133,12 @@ export function RangeMetricChart({
       <small style={{ color }}>
         ▮ Daily range (avg tick) · ┄ Overall average {format(overallAverage, rows[0].unit)}
       </small>
+      <OutlierNote
+        outliers={outliers}
+        rows={rows.map((row) => ({ date: row.date, value: row.average }))}
+        unit={rows[0].unit}
+        decimals={decimalsByMetric[metric]}
+      />
     </>
   );
 }

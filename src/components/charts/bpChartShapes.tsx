@@ -3,6 +3,7 @@ export function bpRangeBarShape(
   lowKey: string,
   highKey: string,
   avgKey: string,
+  outlierKey?: string,
 ) {
   return (props: any) => {
     const { x, y, width, height, payload } = props;
@@ -18,6 +19,7 @@ export function bpRangeBarShape(
       high > low
         ? yAdj + barHeight * ((high - average) / (high - low))
         : yAdj + barHeight / 2;
+    const isOutlier = outlierKey ? Boolean(payload[outlierKey]) : false;
     return (
       <g>
         <rect
@@ -37,6 +39,19 @@ export function bpRangeBarShape(
           stroke={color}
           strokeWidth={2}
         />
+        {isOutlier && (
+          <rect
+            x={xAdj - 2}
+            y={yAdj - 2}
+            width={barWidth + 4}
+            height={barHeight + 4}
+            rx={Math.min(6, width / 2 + 2)}
+            fill="none"
+            stroke={color}
+            strokeWidth={1.5}
+            strokeDasharray="3 2"
+          />
+        )}
       </g>
     );
   };
