@@ -243,3 +243,78 @@ export function dataSpan(
     .map((record) => record.date.slice(0, 10));
   return { earliest: dates[0], latest: dates.at(-1) };
 }
+export function formatDate(isoDay: string) {
+  return new Date(`${isoDay}T00:00:00`).toLocaleDateString();
+}
+
+export const highlights: Metric[] = [
+  "weight",
+  "heartRate",
+  "steps",
+  "sleep",
+  "dietaryEnergy",
+];
+export const bpMetrics: Metric[] = [
+  "bloodPressureSystolic",
+  "bloodPressureDiastolic",
+];
+export const walkingMetrics: Metric[] = [
+  "walkingSpeed",
+  "stepLength",
+  "walkingAsymmetry",
+  "doubleSupport",
+];
+export const activityMetrics: Metric[] = [
+  "steps",
+  "distance",
+  "activeEnergy",
+  "sleep",
+];
+export const nutritionMetrics: Metric[] = [
+  "dietaryEnergy",
+  "carbs",
+  "sugar",
+  "fiber",
+  "protein",
+  "fat",
+];
+export const totalsMetrics: Metric[] = [
+  "steps",
+  "distance",
+  "activeEnergy",
+  ...nutritionMetrics,
+];
+
+export function quantile(sorted: number[], p: number) {
+  const i = p * (sorted.length - 1);
+  const lo = Math.floor(i),
+    hi = Math.ceil(i);
+  return lo === hi
+    ? sorted[lo]
+    : sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo);
+}
+// Scales the shared axis to Tukey's fences (1.5x IQR) so a rare bad reading can't flatten every other day's bar; never widens beyond the true observed range.
+export function boundsOf(values: number[]) {
+  const sorted = values.slice().sort((a, b) => a - b);
+  if (!sorted.length) return { min: 0, max: 1 };
+  const actualMin = sorted[0],
+    actualMax = sorted.at(-1)!;
+  const q1 = quantile(sorted, 0.25),
+    q3 = quantile(sorted, 0.75);
+  const iqr = q3 - q1 || 1;
+  return {
+    min: Math.max(actualMin, q1 - iqr * 1.5),
+    max: Math.min(actualMax, q3 + iqr * 1.5),
+  };
+}
+export function columnBounds(days: (DailyStats | undefined)[]) {
+  return boundsOf(
+    days.filter((day): day is DailyStats => !!day).flatMap((day) => day.values),
+  );
+}
+export function totalBounds(totals: (number | undefined)[]) {
+  return boundsOf(totals.filter((v): v is number => v !== undefined));
+}
+
+export const MAX_TABLE_ROWS = 365;
+export const MAX_PDF_TABLE_ROWS = 365;
