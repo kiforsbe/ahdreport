@@ -18,8 +18,9 @@ applied uniformly:
    applied across every chart type.
 3. **Blood pressure derived metrics** — pulse pressure and mean arterial pressure
    (MAP), computed from data already imported.
-4. **Blood pressure category strip** — a day-by-day AHA category view alongside the
-   existing BP range chart.
+4. **Blood pressure category strip** — a day-by-day category view alongside the
+   existing BP range chart, with a Swedish/AHA classification toggle (Swedish by
+   default).
 
 A fifth, unrelated-but-concurrent change tightens data quality at the source: the
 Apple Health parser gets physiological plausibility bounds, so a sensor glitch (a
@@ -155,16 +156,17 @@ export interface BpDerivedDay {
   diastolic: number;
   pulsePressure: number; // systolic − diastolic
   map: number;           // diastolic + pulsePressure / 3
-  category: BpCategory;  // see section 4
 }
 export function bpDerived(records: HealthRecord[]): BpDerivedDay[]
 ```
 
 Joins `dailyStats(records, "bloodPressureSystolic")` and
 `dailyStats(records, "bloodPressureDiastolic")` by date (only days with both present),
-using each day's average, and computes pulse pressure, MAP, and AHA category in one
-pass. Both the derived-metrics panel and the category strip (section 4) consume this
-same function, so the systolic/diastolic join only happens once.
+using each day's average, and computes pulse pressure and MAP in one pass. Both the
+derived-metrics panel and the category strip (section 4) consume this same function,
+so the systolic/diastolic join only happens once — category classification is kept
+separate (section 4), since which scheme applies is a user-facing toggle, not a fixed
+property of the data.
 
 ### Rendering
 
@@ -180,17 +182,54 @@ types).
 
 ## 4. Blood pressure category strip
 
+### Two classification schemes
+
+Clinical BP categorization isn't one global standard: Swedish practice follows the
+European ESC/ESH classification, which draws its band boundaries — and has more of
+them — differently from the US-oriented 2017 ACC/AHA scheme used as the initial
+default in an earlier draft of this design. Rather than pick one, the strip offers
+both as a toggle, **defaulting to Swedish**, since that's the standard clinicians
+using this report in Sweden will expect; AHA remains one click away for anyone who
+wants the US framing instead.
+
 ### New pure values (`src/report.ts`)
 
 ```ts
-export type BpCategory = "Normal" | "Elevated" | "Stage 1" | "Stage 2" | "Crisis";
-export function bpCategory(systolic: number, diastolic: number): BpCategory;
-export const bpCategoryColors: Record<BpCategory, string>;
-export const bpCategoryOrder: BpCategory[]; // Normal → Crisis, for stable summary ordering
+export type BpScheme = "swedish" | "aha";
+
+export type SwedishBpCategory =
+  | "Optimal"
+  | "Normal"
+  | "High normal"
+  | "Grade 1 hypertension"
+  | "Grade 2 hypertension"
+  | "Grade 3 hypertension";
+export function bpCategorySwedish(
+  systolic: number,
+  diastolic: number,
+): SwedishBpCategory;
+export const bpCategoryColorsSwedish: Record<SwedishBpCategory, string>;
+export const bpCategoryOrderSwedish: SwedishBpCategory[]; // Optimal → Grade 3
+
+export type AhaBpCategory = "Normal" | "Elevated" | "Stage 1" | "Stage 2" | "Crisis";
+export function bpCategoryAha(systolic: number, diastolic: number): AhaBpCategory;
+export const bpCategoryColorsAha: Record<AhaBpCategory, string>;
+export const bpCategoryOrderAha: AhaBpCategory[]; // Normal → Crisis
 ```
 
-Classification follows the 2017 ACC/AHA guideline thresholds, checked most-severe
-first so either value crossing a threshold is sufficient to escalate the category:
+**Swedish** (ESC/ESH-aligned) thresholds, checked most-severe first so either value
+crossing a threshold is sufficient to escalate the category:
+
+| Category | Threshold |
+|---|---|
+| Grade 3 hypertension | systolic ≥ 180 or diastolic ≥ 110 |
+| Grade 2 hypertension | systolic ≥ 160 or diastolic ≥ 100 |
+| Grade 1 hypertension | systolic ≥ 140 or diastolic ≥ 90 |
+| High normal | systolic ≥ 130 or diastolic ≥ 85 |
+| Normal | systolic ≥ 120 or diastolic ≥ 80 |
+| Optimal | systolic < 120 and diastolic < 80 |
+
+**AHA** (2017 ACC/AHA) thresholds, same escalation rule:
 
 | Category | Threshold |
 |---|---|
@@ -200,21 +239,30 @@ first so either value crossing a threshold is sufficient to escalate the categor
 | Elevated | systolic ≥ 120 and diastolic < 80 |
 | Normal | systolic < 120 and diastolic < 80 |
 
-Colors are a dedicated green→red severity ramp (`bpCategoryColors`), deliberately
-*not* drawn from `colorsByMetric` — this is encoding risk severity, an ordinal scale,
-not per-metric identity, and reusing the metric palette would send the wrong signal.
+Each scheme gets its own dedicated green→red severity ramp
+(`bpCategoryColorsSwedish` / `bpCategoryColorsAha`), deliberately *not* drawn from
+`colorsByMetric` — this is encoding risk severity, an ordinal scale, not per-metric
+identity, and reusing the metric palette would send the wrong signal. The two ramps
+are independent of each other: six Swedish bands and five AHA bands don't need
+color-matching at corresponding indices, only a consistent light-to-dark,
+green-to-red escalation within each.
 
 ### Rendering
 
 A thin row of colored day-cells (plain HTML/CSS, not SVG/Recharts — simpler than
 `DailyTotalBar` since there's no magnitude to encode, only a category color) rendered
-directly under the existing `BloodPressureChart`, inside its existing panel wrapper.
-Only days with BP data get a cell — no gray placeholder cells for gaps, consistent
-with how the rest of the app treats missing days. Each cell's `title` attribute shows
-the date and category on hover. Below the strip, a one-line text summary: the
-percentage of days (of those with BP data) in each category present in the period,
-e.g. "62% Normal · 28% Elevated · 10% Stage 1", using `bpCategoryOrder` so the
-breakdown always reads least-to-most severe.
+directly under the existing `BloodPressureChart`, inside its existing panel wrapper,
+with a small scheme toggle ("Swedish" / "AHA", Swedish selected by default) above the
+strip. Only days with BP data get a cell — no gray placeholder cells for gaps,
+consistent with how the rest of the app treats missing days. Each cell's `title`
+attribute shows the date and category on hover. Below the strip, a one-line text
+summary: the percentage of days (of those with BP data) in each category present in
+the period, e.g. "58% Normal · 24% High normal · 18% Grade 1 hypertension", using
+whichever `bpCategoryOrder*` matches the active scheme so the breakdown always reads
+least-to-most severe. Toggling the scheme recomputes the strip and summary line from
+the same `bpDerived()` output already in memory — no re-fetch, no re-parse. The
+toggle is local UI state, not persisted between sessions, and doesn't affect
+CSV/XLSX export, which doesn't carry any of this dashboard-only analysis today.
 
 ## 5. Invalid-data filtering (Apple Health parser)
 
@@ -294,9 +342,13 @@ warnings.
 - `outlierDates()`: a series with one clear IQR-violating spike flags exactly that
   date; a series with no real outliers returns an empty set.
 - `bpDerived()`: known systolic/diastolic pairs produce the expected pulse
-  pressure/MAP arithmetic and are classified into the expected `BpCategory` at each
-  threshold boundary (e.g. 118/76 → Normal, 125/78 → Elevated, 135/85 → Stage 1,
-  145/95 → Stage 2, 185/125 → Crisis).
+  pressure/MAP arithmetic (e.g. 130/80 → pulse pressure 50, MAP 96.7).
+- `bpCategorySwedish()` / `bpCategoryAha()`: known systolic/diastolic pairs are
+  classified into the expected category at each threshold boundary — Swedish (e.g.
+  115/75 → Optimal, 125/78 → Normal, 132/86 → High normal, 145/92 → Grade 1
+  hypertension, 165/102 → Grade 2 hypertension, 185/115 → Grade 3 hypertension) and
+  AHA (e.g. 118/76 → Normal, 125/78 → Elevated, 135/85 → Stage 1, 145/95 → Stage 2,
+  185/125 → Crisis).
 - Parser: an injected implausible record (e.g. heart rate far outside 20–300) is
   excluded, `diagnostics.implausible` increments, and the warning appears; a
   boundary-plausible record (e.g. heart rate exactly 20 or 300) is kept, confirming
