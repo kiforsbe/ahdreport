@@ -59,3 +59,22 @@ describe("clinical data in Apple Health ZIP exports", () => {
     });
   });
 });
+
+describe("nutrition records", () => {
+  const nutritionXml = `<?xml version="1.0"?><HealthData><Record type="HKQuantityTypeIdentifierDietaryEnergyConsumed" sourceName="MyFitnessPal" unit="kcal" value="650" startDate="2026-01-05 08:00:00 +0000" endDate="2026-01-05 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierDietaryCarbohydrates" sourceName="MyFitnessPal" unit="g" value="80" startDate="2026-01-05 08:00:00 +0000" endDate="2026-01-05 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierDietarySugar" sourceName="MyFitnessPal" unit="g" value="20" startDate="2026-01-05 08:00:00 +0000" endDate="2026-01-05 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierDietaryFiber" sourceName="MyFitnessPal" unit="g" value="8" startDate="2026-01-05 08:00:00 +0000" endDate="2026-01-05 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierDietaryProtein" sourceName="MyFitnessPal" unit="g" value="25" startDate="2026-01-05 08:00:00 +0000" endDate="2026-01-05 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierDietaryFatTotal" sourceName="MyFitnessPal" unit="g" value="22" startDate="2026-01-05 08:00:00 +0000" endDate="2026-01-05 08:00:00 +0000"/></HealthData>`;
+  it("maps all six dietary identifiers to nutrition metrics", async () => {
+    const result = await parseAppleHealthExport(
+      Buffer.from(nutritionXml),
+      "export.xml",
+    );
+    expect(result.diagnostics.unsupported).toBe(0);
+    expect(result.records).toEqual([
+      expect.objectContaining({ metric: "dietaryEnergy", value: 650, unit: "kcal" }),
+      expect.objectContaining({ metric: "carbs", value: 80, unit: "g" }),
+      expect.objectContaining({ metric: "sugar", value: 20, unit: "g" }),
+      expect.objectContaining({ metric: "fiber", value: 8, unit: "g" }),
+      expect.objectContaining({ metric: "protein", value: 25, unit: "g" }),
+      expect.objectContaining({ metric: "fat", value: 22, unit: "g" }),
+    ]);
+  });
+});

@@ -26,6 +26,12 @@ const typeMap: Record<string, Metric> = {
   HKQuantityTypeIdentifierStairAscentSpeed: "stairAscentSpeed",
   HKQuantityTypeIdentifierStairDescentSpeed: "stairDescentSpeed",
   HKQuantityTypeIdentifierSixMinuteWalkTestDistance: "sixMinuteWalk",
+  HKQuantityTypeIdentifierDietaryEnergyConsumed: "dietaryEnergy",
+  HKQuantityTypeIdentifierDietaryCarbohydrates: "carbs",
+  HKQuantityTypeIdentifierDietarySugar: "sugar",
+  HKQuantityTypeIdentifierDietaryFiber: "fiber",
+  HKQuantityTypeIdentifierDietaryProtein: "protein",
+  HKQuantityTypeIdentifierDietaryFatTotal: "fat",
   HKClinicalTypeIdentifierMedicationRecord: "medication",
 };
 

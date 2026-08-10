@@ -17,6 +17,12 @@ export type Metric =
   | "stairAscentSpeed"
   | "stairDescentSpeed"
   | "sixMinuteWalk"
+  | "dietaryEnergy"
+  | "carbs"
+  | "sugar"
+  | "fiber"
+  | "protein"
+  | "fat"
   | "medication";
 
 export interface HealthRecord {
