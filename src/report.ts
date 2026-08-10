@@ -265,6 +265,65 @@ export function outlierDates(
   );
 }
 
+// Change-point-merged plateau overlay: groups days-with-data into 7-day
+// buckets by position (not calendar weeks), then greedily merges adjacent
+// buckets whose means are close relative to their combined noise. See
+// docs/design/chart_analysis.md section 1 for the algorithm rationale.
+export function plateaus(
+  records: HealthRecord[],
+  metric: Metric,
+  aggregate: "average" | "total" = "average",
+): { date: string; value: number; unit: string }[] {
+  const rows = daily(records, metric, aggregate).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  if (rows.length < 14) return [];
+  const values = rows.map((r) => r.value);
+  const range = Math.max(...values) - Math.min(...values);
+  const noiseFloor = range * 0.02;
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const stdDev = (xs: number[]) => {
+    const m = mean(xs);
+    return Math.sqrt(xs.reduce((sum, x) => sum + (x - m) ** 2, 0) / xs.length);
+  };
+  const bucketSize = 7;
+  const buckets: { values: number[]; startIndex: number; endIndex: number }[] =
+    [];
+  for (let i = 0; i < rows.length; i += bucketSize) {
+    const end = Math.min(i + bucketSize, rows.length);
+    buckets.push({
+      values: values.slice(i, end),
+      startIndex: i,
+      endIndex: end - 1,
+    });
+  }
+  const segments: { values: number[]; startIndex: number; endIndex: number }[] =
+    [{ ...buckets[0] }];
+  for (let i = 1; i < buckets.length; i++) {
+    const bucket = buckets[i];
+    const current = segments.at(-1)!;
+    const currentMean = mean(current.values);
+    const bucketMean = mean(bucket.values);
+    const pooledSD = (stdDev(current.values) + stdDev(bucket.values)) / 2;
+    const threshold = 0.75 * Math.max(pooledSD, noiseFloor);
+    if (Math.abs(bucketMean - currentMean) <= threshold) {
+      current.values = current.values.concat(bucket.values);
+      current.endIndex = bucket.endIndex;
+    } else {
+      segments.push({ ...bucket });
+    }
+  }
+  const unit = rows[0].unit;
+  const result: { date: string; value: number; unit: string }[] = [];
+  for (const segment of segments) {
+    const segmentMean = mean(segment.values);
+    for (let i = segment.startIndex; i <= segment.endIndex; i++) {
+      result.push({ date: rows[i].date, value: segmentMean, unit });
+    }
+  }
+  return result;
+}
+
 export const highlights: Metric[] = [
   "weight",
   "heartRate",

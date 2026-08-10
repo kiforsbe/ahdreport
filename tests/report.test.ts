@@ -10,6 +10,7 @@ import {
   median,
   metricGroups,
   outlierDates,
+  plateaus,
 } from "../src/report";
 import type { HealthRecord } from "../src/shared/types";
 const rows: HealthRecord[] = [
@@ -127,5 +128,31 @@ describe("outlierDates", () => {
   });
   it("returns an empty set for empty input", () => {
     expect(outlierDates([])).toEqual(new Set());
+  });
+});
+
+describe("plateaus", () => {
+  const twoRegimeRows: HealthRecord[] = [
+    ...Array.from({ length: 7 }, (_, i) => ({
+      metric: "weight" as const,
+      date: `2026-01-${String(i + 1).padStart(2, "0")}T08:00:00.000Z`,
+      value: 70,
+      unit: "kg",
+    })),
+    ...Array.from({ length: 7 }, (_, i) => ({
+      metric: "weight" as const,
+      date: `2026-01-${String(i + 8).padStart(2, "0")}T08:00:00.000Z`,
+      value: 90,
+      unit: "kg",
+    })),
+  ];
+  it("merges into two segments for a clear two-regime series", () => {
+    const result = plateaus(twoRegimeRows, "weight");
+    expect(result).toHaveLength(14);
+    expect(result.slice(0, 7).every((r) => r.value === 70)).toBe(true);
+    expect(result.slice(7).every((r) => r.value === 90)).toBe(true);
+  });
+  it("returns no segments below the 14-day-with-data minimum", () => {
+    expect(plateaus(twoRegimeRows.slice(0, 13), "weight")).toEqual([]);
   });
 });
