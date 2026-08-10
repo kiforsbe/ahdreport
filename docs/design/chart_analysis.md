@@ -394,11 +394,11 @@ implausible: number;
 ```
 
 Incremented alongside the existing `unsupported` counter, populated the same way.
-`App.tsx`'s diagnostics section gets one more line matching the existing
+`App.tsx`'s diagnostics section gets one more fixed line matching the existing
 `unsupported`-count line exactly in style ("N record(s) were excluded as
-physiologically implausible."), and a warning is added to `diagnostics.warnings`
-when `implausible > 0`, following the same pattern as the existing medication/clinical
-warnings.
+physiologically implausible."). No entry is added to `diagnostics.warnings` for this:
+the fixed line already states the count, and pushing an identical sentence into
+`warnings` too would show the user the same message twice.
 
 ## Testing
 
@@ -423,9 +423,10 @@ warnings.
   returns `undefined` (below the 3-day minimum); a series with no days at or above
   the floor returns `undefined`.
 - Parser: an injected implausible record (e.g. heart rate far outside 20–300) is
-  excluded, `diagnostics.implausible` increments, and the warning appears; a
-  boundary-plausible record (e.g. heart rate exactly 20 or 300) is kept, confirming
-  the bounds are inclusive and genuine extremes aren't falsely rejected.
+  excluded and `diagnostics.implausible` increments, with no corresponding entry in
+  `diagnostics.warnings`; a boundary-plausible record (e.g. heart rate exactly 20 or
+  300) is kept, confirming the bounds are inclusive and genuine extremes aren't
+  falsely rejected.
 
 ## Out of scope
 

@@ -1,8 +1,8 @@
 import { useContext } from "react";
 import {
   Area,
-  AreaChart,
   CartesianGrid,
+  ComposedChart,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -63,7 +63,7 @@ export function MetricChart({
     plateau: plateauByDate.get(row.date),
   }));
   const chart = (width?: number, height?: number) => (
-    <AreaChart data={chartRows} width={width} height={height}>
+    <ComposedChart data={chartRows} width={width} height={height}>
         <defs>
           <linearGradient id={`fill-${metric}`} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity=".32" />
@@ -79,6 +79,7 @@ export function MetricChart({
           dataKey="value"
           stroke={color}
           strokeWidth={2.5}
+          strokeOpacity={0.35}
           fill={`url(#fill-${metric})`}
           isAnimationActive={!printLayout}
           dot={outlierDot(outliers, color)}
@@ -87,13 +88,14 @@ export function MetricChart({
           <Line
             type="stepAfter"
             dataKey="plateau"
+            name="Plateau"
             stroke={color}
             strokeWidth={2.5}
             dot={false}
             isAnimationActive={!printLayout}
           />
         )}
-    </AreaChart>
+    </ComposedChart>
   );
   if (printLayout)
     return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;

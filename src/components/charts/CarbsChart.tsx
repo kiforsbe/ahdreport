@@ -1,8 +1,8 @@
 import { useContext } from "react";
 import {
   Area,
-  AreaChart,
   CartesianGrid,
+  ComposedChart,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -76,7 +76,7 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
     plateau: plateauByDate.get(row.date),
   }));
   const chart = (width?: number, height?: number) => (
-    <AreaChart data={chartRows} width={width} height={height}>
+    <ComposedChart data={chartRows} width={width} height={height}>
       <defs>
         <linearGradient id="fill-carbs-other" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor={colorsByMetric.carbs} stopOpacity=".32" />
@@ -97,6 +97,7 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         stackId="carbs"
         stroke={colorsByMetric.sugar}
         strokeWidth={2}
+        strokeOpacity={0.35}
         fill="url(#fill-carbs-sugar)"
         isAnimationActive={!printLayout}
       />
@@ -106,6 +107,7 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         stackId="carbs"
         stroke={colorsByMetric.carbs}
         strokeWidth={2}
+        strokeOpacity={0.35}
         fill="url(#fill-carbs-other)"
         isAnimationActive={!printLayout}
         dot={outlierDot(outliers, colorsByMetric.carbs)}
@@ -114,13 +116,14 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
         <Line
           type="stepAfter"
           dataKey="plateau"
+          name="Plateau"
           stroke={colorsByMetric.carbs}
           strokeWidth={2.5}
           dot={false}
           isAnimationActive={!printLayout}
         />
       )}
-    </AreaChart>
+    </ComposedChart>
   );
   return (
     <>
