@@ -9,7 +9,7 @@ function csvCell(value: string | number | undefined) {
     : safeText;
 }
 export function exportRows(records: HealthData["records"]) {
-  return records.slice().sort((a, b) => b.date.localeCompare(a.date));
+  return records.slice().reverse();
 }
 export function createCsv(records: HealthData["records"]) {
   const rows = [
