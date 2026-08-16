@@ -421,7 +421,8 @@ td:nth-child(2) {
   }
   .header-actions,
   .controls,
-  .notice {
+  .notice,
+  .detailed-report-toggle {
     display: none;
   }
   .print-period {

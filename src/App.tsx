@@ -27,6 +27,7 @@ import { BloodPressureChart } from "./components/charts/BloodPressureChart";
 import { PulsePressureChart } from "./components/charts/PulsePressureChart";
 import { BpHypertensionWarning } from "./components/BpHypertensionWarning";
 import { coverageNote } from "./components/TableNotes";
+import { LazyDisclosure } from "./components/LazyDisclosure";
 import { ReportTable } from "./components/tables/ReportTable";
 import { VitalsReportTable } from "./components/tables/VitalsReportTable";
 import { WalkingReportTable } from "./components/tables/WalkingReportTable";
@@ -404,31 +405,73 @@ export function App() {
           available, or where a metric's own data starts later or ends earlier
           than the selected period.
         </p>
-        <VitalsReportTable records={records} from={from} to={to} metadata={metadata} />
-        <ActivityReportTable records={records} from={from} to={to} metadata={metadata} />
-        <WalkingReportTable records={records} from={from} to={to} metadata={metadata} />
-        <NutritionReportTable records={records} from={from} to={to} metadata={metadata} />
-        {metricGroups
-          .flatMap((g) => g.metrics)
-          .filter(
-            (metric) =>
-              !bpMetrics.includes(metric) &&
-              metric !== "heartRate" &&
-              metric !== "weight" &&
-              !activityMetrics.includes(metric) &&
-              !walkingMetrics.includes(metric) &&
-              !nutritionMetrics.includes(metric),
-          )
-          .map((m) => (
-            <ReportTable
-              key={m}
-              metric={m}
-              records={records}
-              from={from}
-              to={to}
-              metadata={metadata}
-            />
-          ))}
+        {/*
+          open={printLayout || undefined} forces this section open whenever
+          printLayout is true; when printLayout is false it falls back
+          (undefined) to LazyDisclosure's own uncontrolled state, i.e. whatever
+          the user had it set to. Because setPrintLayout inside
+          healthAtlasPrintLayout is wrapped in flushSync (see the useEffect
+          above), this force-open commits synchronously in the same pass,
+          satisfying the print-layout protocol's steps 1 ("set print layout
+          synchronously") and 2 ("ensure detailed tables and fixed-size charts
+          are committed") as a single atomic state update — no additional
+          coordination code is needed in the healthAtlasPrintLayout bridge
+          itself.
+
+          keepMounted={false} is required here (unlike OverviewCards' lazy
+          sections) — without it, the first PDF export would permanently mount
+          these tables in the viewer DOM from then on, even after visually
+          re-closing, because LazyDisclosure's "keepMounted: true" default
+          never re-checks whether the current open state came from a forced
+          controlled prop or genuine user interaction.
+
+          No explicit "restore previous viewer disclosure state" code is
+          needed: because the forced-open value is derived from printLayout
+          rather than stored as a separate flag, and LazyDisclosure's
+          controlled-open guard prevents the forced toggle from overwriting the
+          user's own uncontrolled preference, the disclosure automatically
+          reverts to exactly what it was once printLayout goes back to false —
+          which electron/main.ts's existing `finally` block already guarantees
+          happens even if PDF generation throws or the save dialog is
+          canceled.
+        */}
+        <LazyDisclosure
+          className="detailed-report-disclosure"
+          summary="Show detailed measurements"
+          summaryClassName="detailed-report-toggle"
+          open={printLayout || undefined}
+          keepMounted={false}
+        >
+          {() => (
+            <>
+              <VitalsReportTable records={records} from={from} to={to} metadata={metadata} />
+              <ActivityReportTable records={records} from={from} to={to} metadata={metadata} />
+              <WalkingReportTable records={records} from={from} to={to} metadata={metadata} />
+              <NutritionReportTable records={records} from={from} to={to} metadata={metadata} />
+              {metricGroups
+                .flatMap((g) => g.metrics)
+                .filter(
+                  (metric) =>
+                    !bpMetrics.includes(metric) &&
+                    metric !== "heartRate" &&
+                    metric !== "weight" &&
+                    !activityMetrics.includes(metric) &&
+                    !walkingMetrics.includes(metric) &&
+                    !nutritionMetrics.includes(metric),
+                )
+                .map((m) => (
+                  <ReportTable
+                    key={m}
+                    metric={m}
+                    records={records}
+                    from={from}
+                    to={to}
+                    metadata={metadata}
+                  />
+                ))}
+            </>
+          )}
+        </LazyDisclosure>
       </section>
       </main>
     </PrintLayoutContext.Provider>

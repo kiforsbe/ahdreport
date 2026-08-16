@@ -295,7 +295,8 @@ charts also include a dashed overall-average reference line and a legend explain
 daily range, tick, and benchmark.
 
 The detailed section is part of the same React document and is available in both viewer
-and PDF modes. It contains specialized tables:
+and PDF modes. In the viewer it is lazily mounted behind a "Show detailed measurements"
+disclosure and is force-mounted during print preparation. It contains specialized tables:
 
 - `VitalsReportTable` combines pressure, heart rate, and weight.
 - `ActivityReportTable` shows per-day totals as in-cell bars.
@@ -350,7 +351,7 @@ sequenceDiagram
         Main-->>UI: canceled
     else selected
         Main->>DOM: await healthAtlasPrintLayout(true, rasterizeCharts)
-        DOM->>DOM: flushSync print state
+        DOM->>DOM: flushSync print state (also force-mounts the detailed report)
         DOM->>DOM: await fonts and two animation frames
         DOM->>DOM: verify print-chart readiness markers
         opt compact PDF
