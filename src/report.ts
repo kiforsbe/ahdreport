@@ -115,13 +115,73 @@ export const metricGroups: { title: string; metrics: Metric[] }[] = [
     metrics: ["dietaryEnergy", "carbs", "sugar", "fiber", "protein", "fat"],
   },
 ];
+export interface RecordRange {
+  start: number;
+  end: number; // exclusive
+}
+function toUtcInstant(day: string, endOfDay: boolean): string | undefined {
+  const time = endOfDay ? "23:59:59.999" : "00:00:00";
+  const date = new Date(`${day}T${time}`);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+}
+// First index i such that records[i].date >= iso.
+function lowerBound(records: readonly HealthRecord[], iso: string): number {
+  let lo = 0;
+  let hi = records.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (records[mid].date < iso) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+// First index i such that records[i].date > iso (i.e. count of dates <= iso).
+function upperBound(records: readonly HealthRecord[], iso: string): number {
+  let lo = 0;
+  let hi = records.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (records[mid].date <= iso) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+// Binary lower/upper bound over a globally ascending-sorted record array
+// (invariant established by the parser; see electron/appleHealthParser.ts).
+// `from`/`to` are local-time day boundaries, matching the UI's date
+// inputs; they are converted here to their equivalent UTC ISO instant —
+// exactly what `new Date(...).getTime()` (i.e. `Date.parse`) already does —
+// before comparing against `record.date`, which is always a UTC ISO string
+// produced by `Date.prototype.toISOString()`. Do not compare the raw local
+// boundary strings against record.date directly.
+export function recordRange(
+  records: readonly HealthRecord[],
+  from: string,
+  to: string,
+): RecordRange {
+  if (!records.length) return { start: 0, end: 0 };
+  let start = 0;
+  if (from) {
+    const startIso = toUtcInstant(from, false);
+    if (startIso === undefined) return { start: 0, end: 0 };
+    start = lowerBound(records, startIso);
+  }
+  let end = records.length;
+  if (to) {
+    const endIso = toUtcInstant(to, true);
+    if (endIso === undefined) return { start: 0, end: 0 };
+    end = upperBound(records, endIso);
+  }
+  // Normalize an empty result to the canonical {0, 0} (rather than e.g.
+  // {n, n} when the query window falls entirely after the data), matching
+  // what a linear scan naturally produces and what callers expect an
+  // "empty range" to look like.
+  if (end <= start) return { start: 0, end: 0 };
+  return { start, end };
+}
 export function filtered(records: HealthRecord[], from: string, to: string) {
-  const start = from ? new Date(`${from}T00:00:00`).getTime() : -Infinity;
-  const end = to ? new Date(`${to}T23:59:59.999`).getTime() : Infinity;
-  return records.filter((record) => {
-    const timestamp = Date.parse(record.date);
-    return Number.isFinite(timestamp) && timestamp >= start && timestamp <= end;
-  });
+  const { start, end } = recordRange(records, from, to);
+  return records.slice(start, end);
 }
 export function latest(records: HealthRecord[], metric: Metric) {
   return records
