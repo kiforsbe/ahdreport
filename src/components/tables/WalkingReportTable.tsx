@@ -7,6 +7,7 @@ import {
   columnBounds,
   dailyStats,
   decimalsByMetric,
+  formatDate,
   labels,
   walkingMetrics,
 } from "../../report";
@@ -73,7 +74,7 @@ export function WalkingReportTable({
         <tbody>
           {dates.map((date) => (
             <tr key={date}>
-              <td>{new Date(`${date}T00:00:00`).toLocaleDateString()}</td>
+              <td>{formatDate(date)}</td>
               {walkingMetrics.map((metric) => {
                 const day = byMetric.get(metric)!.get(date);
                 const bounds = boundsByMetric.get(metric)!;

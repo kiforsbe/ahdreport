@@ -7,6 +7,7 @@ import {
   colorsByMetric,
   dailyTotals,
   decimalsByMetric,
+  formatDate,
   labels,
   totalBounds,
 } from "../../report";
@@ -77,7 +78,7 @@ export function ActivityReportTable({
         <tbody>
           {dates.map((date) => (
             <tr key={date}>
-              <td>{new Date(`${date}T00:00:00`).toLocaleDateString()}</td>
+              <td>{formatDate(date)}</td>
               {activityMetrics.map((metric) => {
                 const day = totalsByMetric.get(metric)!.get(date);
                 const bounds = boundsByMetric.get(metric)!;

@@ -7,6 +7,7 @@ import {
   columnBounds,
   dailyStats,
   decimalsByMetric,
+  formatDate,
   labels,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
@@ -109,7 +110,7 @@ export function VitalsReportTable({
         <tbody>
           {dates.map((date) => (
             <tr key={date}>
-              <td>{new Date(`${date}T00:00:00`).toLocaleDateString()}</td>
+              <td>{formatDate(date)}</td>
               <td>
                 {cell(
                   diastolic.get(date),

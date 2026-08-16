@@ -7,6 +7,7 @@ import {
   columnBounds,
   dailyStats,
   decimalsByMetric,
+  formatDate,
   labels,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
@@ -54,7 +55,7 @@ export function ReportTable({
         <tbody>
           {days.map((day) => (
             <tr key={day.date}>
-              <td>{new Date(`${day.date}T00:00:00`).toLocaleDateString()}</td>
+              <td>{formatDate(day.date)}</td>
               <td>
                 <DailyDistribution
                   min={day.min}

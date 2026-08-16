@@ -14,6 +14,7 @@ import {
   colorsByMetric,
   dailyStats,
   format,
+  formatDate,
   outlierDates,
   bpDerived,
   bpCategorySwedish,
@@ -55,7 +56,7 @@ function BpTooltip({ active, payload, label, categoryColors }: any) {
         fontSize: 12,
       }}
     >
-      <b>{new Date(`${label}T00:00:00`).toLocaleDateString()}</b>
+      <b>{formatDate(label)}</b>
       <div style={{ color: colorsByMetric.bloodPressureSystolic, marginTop: 4 }}>
         Systolic: {range(row.sLow, row.sHigh, row.sAvg)}
       </div>

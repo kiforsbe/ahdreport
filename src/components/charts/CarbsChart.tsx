@@ -15,6 +15,7 @@ import {
   daily,
   decimalsByMetric,
   format,
+  formatDate,
   outlierDates,
   plateaus,
 } from "../../report";
@@ -35,7 +36,7 @@ function CarbsTooltip({ active, payload, label }: any) {
         fontSize: 12,
       }}
     >
-      <b>{new Date(`${label}T00:00:00`).toLocaleDateString()}</b>
+      <b>{formatDate(label)}</b>
       <div style={{ color: colorsByMetric.carbs, marginTop: 4 }}>
         Carbohydrates: {format(row.carbs, row.unit)}
       </div>
