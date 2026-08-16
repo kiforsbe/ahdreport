@@ -79,6 +79,19 @@ describe("nutrition records", () => {
   });
 });
 
+describe("record ordering", () => {
+  it("returns records sorted ascending by date even when input timestamps are out of order", async () => {
+    const unorderedXml = `<?xml version="1.0"?><HealthData><Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Scale" unit="kg" value="72.0" startDate="2026-01-05 08:00:00 +0000" endDate="2026-01-05 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Scale" unit="kg" value="70.0" startDate="2026-01-01 08:00:00 +0000" endDate="2026-01-01 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Scale" unit="kg" value="71.0" startDate="2026-01-03 08:00:00 +0000" endDate="2026-01-03 08:00:00 +0000"/></HealthData>`;
+    const result = await parseAppleHealthExport(
+      Buffer.from(unorderedXml),
+      "export.xml",
+    );
+    const dates = result.records.map((r) => r.date);
+    expect(dates).toEqual([...dates].sort());
+    expect(result.records.map((r) => r.value)).toEqual([70.0, 71.0, 72.0]);
+  });
+});
+
 describe("physiological plausibility filtering", () => {
   it("excludes implausible vitals readings and counts them in diagnostics", async () => {
     const xml = `<?xml version="1.0"?><HealthData><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" value="999" startDate="2026-01-06 08:00:00 +0000" endDate="2026-01-06 08:00:00 +0000"/><Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" value="62" startDate="2026-01-06 09:00:00 +0000" endDate="2026-01-06 09:00:00 +0000"/></HealthData>`;
