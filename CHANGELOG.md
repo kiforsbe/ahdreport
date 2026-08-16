@@ -2,6 +2,23 @@
 
 All notable changes to AHDReport are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Cached the `Intl.NumberFormat`/`Intl.DateTimeFormat` instances behind
+  `format()`/`formatDate()` in `report.ts` instead of constructing them on
+  every call, and routed table rows and chart tooltips through the shared
+  `formatDate()` helper.
+- Replaced per-metric `dataSpan()` scans with a single-pass `rangeMetadata()`
+  traversal shared by all report tables and the blood pressure chart.
+- Replaced the selected-date-range filter's linear scan with an O(log n)
+  binary search (`recordRange()`), relying on the parser's ascending date
+  sort.
+- Replaced the CSV/XLSX export's descending sort with a plain array
+  reverse; equal-timestamp records are now emitted in reverse-of-input
+  order rather than the previous date-stable order.
+
 ## [0.3.0] - 2026-08-10
 
 ### Added

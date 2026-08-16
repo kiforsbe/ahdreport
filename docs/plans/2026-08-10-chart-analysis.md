@@ -313,7 +313,7 @@ Expected: FAIL — `outlierDates is not a function` (or not exported).
 
 - [ ] **Step 3: Implement `outlierDates()`**
 
-Add to `src/report.ts`, after `dataSpan()`. Reuses the exported `quantile(sorted, p)` helper that already lives in this file (used by `boundsOf`) instead of duplicating it:
+Add to `src/report.ts`, after `rangeMetadata()` (formerly `dataSpan()`). Reuses the exported `quantile(sorted, p)` helper that already lives in this file (used by `boundsOf`) instead of duplicating it:
 
 ```ts
 // Tukey fences (1.5x IQR) — flags a day as statistically unusual without

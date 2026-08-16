@@ -8,6 +8,13 @@ function csvCell(value: string | number | undefined) {
     ? `"${safeText.replaceAll('"', '""')}"`
     : safeText;
 }
+// Assumes `records` arrives already sorted ascending by date (the invariant
+// established by the parser, see electron/appleHealthParser.ts) — that's
+// what makes a plain reverse() equivalent to a descending sort. Do not
+// remove this comment when editing nearby code later. Because this reverses
+// input order rather than doing a stable descending sort, records that
+// share an exact timestamp come out in reverse-of-input order, not
+// date-stable order.
 export function exportRows(records: HealthData["records"]) {
   return records.slice().reverse();
 }

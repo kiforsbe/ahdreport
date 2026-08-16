@@ -65,7 +65,8 @@ generically over `Metric`.
   `"Mobility"`.
 
 No changes to `filtered`, `latest`, `median`, `change`, `daily`, `dailyTotals`,
-`dailyStats`, `format`, or `dataSpan` — all are already generic over `Metric`.
+`dailyStats`, `format`, or `rangeMetadata` (formerly `dataSpan`) — all are
+already generic over `Metric`.
 
 ## Dashboard: sum vs. average, and the existing bug
 
