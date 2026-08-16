@@ -295,6 +295,9 @@ header span {
 .print-layout .grid {
   grid-template-columns: 1fr;
 }
+.print-layout .detailed-report-toggle {
+  display: none;
+}
 main.print-layout {
   max-width: 718px;
   width: 718px;
