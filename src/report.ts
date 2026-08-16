@@ -328,7 +328,10 @@ export function rangeMetadata(records: readonly HealthRecord[]): RangeMetadata {
 }
 const dayFormatter = new Intl.DateTimeFormat(undefined);
 export function formatDate(isoDay: string) {
-  return dayFormatter.format(new Date(`${isoDay}T00:00:00`));
+  const date = new Date(`${isoDay}T00:00:00`);
+  return Number.isFinite(date.getTime())
+    ? dayFormatter.format(date)
+    : "Invalid Date";
 }
 
 // Tukey fences (1.5x IQR) — flags a day as statistically unusual without

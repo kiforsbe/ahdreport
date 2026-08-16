@@ -316,6 +316,10 @@ describe("formatDate", () => {
       new Date("2026-01-01T00:00:00").toLocaleDateString(),
     );
   });
+  it("returns 'Invalid Date' instead of throwing for an unparseable date", () => {
+    expect(() => formatDate("not-a-date")).not.toThrow();
+    expect(formatDate("not-a-date")).toBe("Invalid Date");
+  });
 });
 describe("rangeMetadata", () => {
   it("returns empty presence and span data for no records", () => {
