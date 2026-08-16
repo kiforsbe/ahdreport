@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import type { HealthData, Metric } from "../../shared/types";
 import {
   MAX_PDF_TABLE_ROWS,
@@ -16,7 +16,7 @@ import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyTotalBar } from "../DailyTotalBar";
 import { TableNotes, coverageNote, truncationNote, unitLabel } from "../TableNotes";
 
-export function NutritionReportTable({
+export const NutritionReportTable = memo(function NutritionReportTable({
   records,
   from,
   to,
@@ -120,4 +120,4 @@ export function NutritionReportTable({
       </table>
     </section>
   );
-}
+});

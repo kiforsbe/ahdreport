@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import {
   Area,
   AreaChart,
@@ -39,7 +39,7 @@ function PulsePressureTooltip({ active, payload, label }: any) {
     </div>
   );
 }
-export function PulsePressureChart({ records }: { records: HealthData["records"] }) {
+export const PulsePressureChart = memo(function PulsePressureChart({ records }: { records: HealthData["records"] }) {
   const printLayout = useContext(PrintLayoutContext);
   const rows = bpDerived(records);
   if (!rows.length)
@@ -110,4 +110,4 @@ export function PulsePressureChart({ records }: { records: HealthData["records"]
       )}
     </article>
   );
-}
+});

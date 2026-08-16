@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import type { HealthData, Metric } from "../../shared/types";
 import {
   MAX_PDF_TABLE_ROWS,
@@ -16,7 +16,7 @@ import { DailyDistribution } from "../DailyDistribution";
 import { DayTrace } from "../DayTrace";
 import { TableNotes, coverageNote, truncationNote, unitLabel } from "../TableNotes";
 
-export function ReportTable({
+export const ReportTable = memo(function ReportTable({
   metric,
   records,
   from,
@@ -86,4 +86,4 @@ export function ReportTable({
       </table>
     </section>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import {
   Area,
   CartesianGrid,
@@ -28,7 +28,7 @@ import { RangeMetricChart } from "./RangeMetricChart";
 import { CarbsChart } from "./CarbsChart";
 import { outlierDot } from "./outlierHelpers";
 
-export function MetricChart({
+export const MetricChart = memo(function MetricChart({
   metric,
   records,
 }: {
@@ -109,4 +109,4 @@ export function MetricChart({
       </ResponsiveContainer>
     </>
   );
-}
+});

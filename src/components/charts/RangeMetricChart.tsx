@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -48,7 +48,7 @@ function RangeMetricTooltip({ active, payload, label }: any) {
     </div>
   );
 }
-export function RangeMetricChart({
+export const RangeMetricChart = memo(function RangeMetricChart({
   metric,
   records,
 }: {
@@ -138,4 +138,4 @@ export function RangeMetricChart({
       </small>
     </>
   );
-}
+});

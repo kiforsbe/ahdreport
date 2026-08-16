@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import {
   Bar,
   CartesianGrid,
@@ -88,7 +88,7 @@ function categoryDot(categoryColors: Record<string, string>) {
     );
   };
 }
-export function BloodPressureChart({
+export const BloodPressureChart = memo(function BloodPressureChart({
   records,
   from,
   to,
@@ -324,4 +324,4 @@ export function BloodPressureChart({
       )}
     </article>
   );
-}
+});

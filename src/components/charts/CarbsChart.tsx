@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import {
   Area,
   CartesianGrid,
@@ -46,7 +46,7 @@ function CarbsTooltip({ active, payload, label }: any) {
     </div>
   );
 }
-export function CarbsChart({ records }: { records: HealthData["records"] }) {
+export const CarbsChart = memo(function CarbsChart({ records }: { records: HealthData["records"] }) {
   const printLayout = useContext(PrintLayoutContext);
   const carbTotals = new Map(
     daily(records, "carbs", "total").map((d) => [d.date, d]),
@@ -149,4 +149,4 @@ export function CarbsChart({ records }: { records: HealthData["records"] }) {
       )}
     </>
   );
-}
+});
