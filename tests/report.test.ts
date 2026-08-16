@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   change,
   daily,
   dailyStats,
   decimalsByMetric,
   filtered,
+  format,
+  formatDate,
   labels,
   latest,
   median,
@@ -262,5 +264,55 @@ describe("longestElevatedRun", () => {
     expect(
       longestElevatedRun(series, bpCategoryOrderSwedish, "Grade 1 hypertension"),
     ).toBeUndefined();
+  });
+});
+describe("format", () => {
+  it("formats zero with fixed decimals and a trailing unit", () => {
+    expect(format(0, "kg", 1)).toBe(
+      `${new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(0)} kg`,
+    );
+  });
+  it("formats negative fractional values", () => {
+    expect(format(-3.456, "kg", 2)).toBe(
+      `${new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(-3.456)} kg`,
+    );
+  });
+  it("rounds to the configured decimals", () => {
+    expect(format(72.5, "bpm", 0)).toBe(
+      `${new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(72.5)} bpm`,
+    );
+  });
+  it("omits the unit suffix when no unit is given", () => {
+    expect(format(5, "", 0)).toBe(
+      new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(5),
+    );
+  });
+  it("falls back to maximumFractionDigits: 1 when decimals is omitted", () => {
+    expect(format(3.14159)).toBe(
+      new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(3.14159),
+    );
+  });
+  it("constructs at most one NumberFormat per decimals configuration", () => {
+    const originalNumberFormat = Intl.NumberFormat;
+    const ctorSpy = vi.spyOn(Intl, "NumberFormat");
+    ctorSpy.mockImplementation(function(this: any, ...args: any[]) {
+      return new originalNumberFormat(...args);
+    } as any);
+    format(1, "kg", 3);
+    format(2, "kg", 3);
+    format(3, "kg", 3);
+    const callsForThreeDecimals = ctorSpy.mock.calls.filter(
+      ([, options]) =>
+        (options as Intl.NumberFormatOptions | undefined)?.minimumFractionDigits === 3,
+    ).length;
+    expect(callsForThreeDecimals).toBeLessThanOrEqual(1);
+    ctorSpy.mockRestore();
+  });
+});
+describe("formatDate", () => {
+  it("formats an ISO day string as a local calendar date", () => {
+    expect(formatDate("2026-01-01")).toBe(
+      new Date("2026-01-01T00:00:00").toLocaleDateString(),
+    );
   });
 });

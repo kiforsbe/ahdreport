@@ -226,12 +226,24 @@ export function dailyStats(
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 }
+// Bounded by the number of distinct decimals configurations actually used
+// (decimalsByMetric's values plus the "auto" default) — not by render count.
+const numberFormatters = new Map<string, Intl.NumberFormat>();
+function numberFormatterFor(decimals?: number) {
+  const key = decimals === undefined ? "auto" : String(decimals);
+  let formatter = numberFormatters.get(key);
+  if (!formatter) {
+    const options: Intl.NumberFormatOptions =
+      decimals === undefined
+        ? { maximumFractionDigits: 1 }
+        : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+    formatter = new Intl.NumberFormat(undefined, options);
+    numberFormatters.set(key, formatter);
+  }
+  return formatter;
+}
 export function format(value: number, unit = "", decimals?: number) {
-  const options =
-    decimals === undefined
-      ? { maximumFractionDigits: 1 }
-      : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
-  return `${new Intl.NumberFormat(undefined, options).format(value)}${unit ? ` ${unit}` : ""}`;
+  return `${numberFormatterFor(decimals).format(value)}${unit ? ` ${unit}` : ""}`;
 }
 // Relies on records being sorted ascending by date (guaranteed by the parser and preserved by filtered()).
 export function dataSpan(
@@ -243,8 +255,9 @@ export function dataSpan(
     .map((record) => record.date.slice(0, 10));
   return { earliest: dates[0], latest: dates.at(-1) };
 }
+const dayFormatter = new Intl.DateTimeFormat(undefined);
 export function formatDate(isoDay: string) {
-  return new Date(`${isoDay}T00:00:00`).toLocaleDateString();
+  return dayFormatter.format(new Date(`${isoDay}T00:00:00`));
 }
 
 // Tukey fences (1.5x IQR) — flags a day as statistically unusual without
