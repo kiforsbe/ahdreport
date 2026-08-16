@@ -10,6 +10,7 @@ import {
   labels,
   metricGroups,
   nutritionMetrics,
+  rangeMetadata,
   walkingMetrics,
 } from "./report";
 import { createCsv, createExcel } from "./export";
@@ -53,6 +54,7 @@ export function App() {
     () => (data ? filtered(data.records, from, to) : []),
     [data, from, to],
   );
+  const metadata = useMemo(() => rangeMetadata(records), [records]);
   const overviewRecords = useMemo(
     () => (data ? filtered(data.records, rangeDate(30, to), to) : []),
     [data, to],
@@ -223,8 +225,8 @@ export function App() {
         </div>
       </main>
     );
-  const medicationPresent = records.some((r) => r.metric === "medication");
-  const hasBloodPressure = records.some((r) => bpMetrics.includes(r.metric));
+  const medicationPresent = metadata.presentMetrics.has("medication");
+  const hasBloodPressure = bpMetrics.some((m) => metadata.presentMetrics.has(m));
   const tableRowLimit = printLayout ? MAX_PDF_TABLE_ROWS : MAX_TABLE_ROWS;
   return (
     <PrintLayoutContext.Provider value={printLayout}>
@@ -334,7 +336,7 @@ export function App() {
             )}
             <div className="grid">
               {group.title === "Vitals" && hasBloodPressure && (
-                <BloodPressureChart records={records} from={from} to={to} />
+                <BloodPressureChart records={records} from={from} to={to} metadata={metadata} />
               )}{" "}
               {group.title === "Vitals" && hasBloodPressure && (
                 <PulsePressureChart records={records} />
@@ -344,10 +346,10 @@ export function App() {
                   (m) =>
                     !bpMetrics.includes(m) &&
                     m !== "sugar" &&
-                    records.some((r) => r.metric === m),
+                    metadata.presentMetrics.has(m),
                 )
                 .map((m) => {
-                  const note = coverageNote(m, records, from, to);
+                  const note = coverageNote(m, metadata, from, to);
                   return (
                     <article className="panel" key={m}>
                       <h3>{labels[m]}</h3>
@@ -359,9 +361,7 @@ export function App() {
                   );
                 })}
             </div>
-            {!group.metrics.some((m) =>
-              records.some((r) => r.metric === m),
-            ) && (
+            {!group.metrics.some((m) => metadata.presentMetrics.has(m)) && (
               <div className="empty">
                 No supported {group.title.toLowerCase()} records were found for
                 this period.
@@ -404,10 +404,10 @@ export function App() {
           available, or where a metric's own data starts later or ends earlier
           than the selected period.
         </p>
-        <VitalsReportTable records={records} from={from} to={to} />
-        <ActivityReportTable records={records} from={from} to={to} />
-        <WalkingReportTable records={records} from={from} to={to} />
-        <NutritionReportTable records={records} from={from} to={to} />
+        <VitalsReportTable records={records} from={from} to={to} metadata={metadata} />
+        <ActivityReportTable records={records} from={from} to={to} metadata={metadata} />
+        <WalkingReportTable records={records} from={from} to={to} metadata={metadata} />
+        <NutritionReportTable records={records} from={from} to={to} metadata={metadata} />
         {metricGroups
           .flatMap((g) => g.metrics)
           .filter(
@@ -426,6 +426,7 @@ export function App() {
               records={records}
               from={from}
               to={to}
+              metadata={metadata}
             />
           ))}
       </section>

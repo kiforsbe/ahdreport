@@ -10,6 +10,7 @@ import {
   labels,
   nutritionMetrics,
   totalBounds,
+  type RangeMetadata,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyTotalBar } from "../DailyTotalBar";
@@ -19,10 +20,12 @@ export function NutritionReportTable({
   records,
   from,
   to,
+  metadata,
 }: {
   records: HealthData["records"];
   from: string;
   to: string;
+  metadata: RangeMetadata;
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const totalsByMetric = new Map(
@@ -55,7 +58,7 @@ export function NutritionReportTable({
     totalsByMetric.get(metric)!.values().next().value?.unit ?? "";
   const tableColumns = nutritionMetrics.filter((metric) => metric !== "sugar");
   const columnNotes = tableColumns.map((metric) => {
-    const note = coverageNote(metric, records, from, to);
+    const note = coverageNote(metric, metadata, from, to);
     return note ? `${labels[metric]} — ${note}` : null;
   });
   return (

@@ -19,6 +19,7 @@ import {
   metricGroups,
   outlierDates,
   plateaus,
+  rangeMetadata,
 } from "../src/report";
 import type { HealthRecord } from "../src/shared/types";
 const rows: HealthRecord[] = [
@@ -314,5 +315,29 @@ describe("formatDate", () => {
     expect(formatDate("2026-01-01")).toBe(
       new Date("2026-01-01T00:00:00").toLocaleDateString(),
     );
+  });
+});
+describe("rangeMetadata", () => {
+  it("returns empty presence and span data for no records", () => {
+    const metadata = rangeMetadata([]);
+    expect(metadata.presentMetrics.size).toBe(0);
+    expect(metadata.spanByMetric.size).toBe(0);
+  });
+  it("tracks earliest/latest per metric across a mixed, sorted array", () => {
+    const mixed: HealthRecord[] = [
+      { metric: "weight", date: "2026-01-01T09:00:00.000Z", value: 70, unit: "kg" },
+      { metric: "steps", date: "2026-01-05T12:00:00.000Z", value: 500, unit: "count" },
+      { metric: "weight", date: "2026-01-10T09:00:00.000Z", value: 71, unit: "kg" },
+    ];
+    const metadata = rangeMetadata(mixed);
+    expect([...metadata.presentMetrics].sort()).toEqual(["steps", "weight"]);
+    expect(metadata.spanByMetric.get("weight")).toEqual({
+      earliest: "2026-01-01",
+      latest: "2026-01-10",
+    });
+    expect(metadata.spanByMetric.get("steps")).toEqual({
+      earliest: "2026-01-05",
+      latest: "2026-01-05",
+    });
   });
 });

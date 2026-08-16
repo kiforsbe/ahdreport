@@ -1,5 +1,5 @@
-import type { HealthData, Metric } from "../shared/types";
-import { dataSpan, formatDate } from "../report";
+import type { Metric } from "../shared/types";
+import { formatDate, type RangeMetadata } from "../report";
 
 export function unitLabel(unit: string) {
   return unit ? ` (${unit})` : "";
@@ -11,12 +11,13 @@ export function truncationNote(shown: number, total: number) {
 }
 export function coverageNote(
   metric: Metric,
-  records: HealthData["records"],
+  metadata: RangeMetadata,
   from: string,
   to: string,
 ) {
-  const { earliest, latest } = dataSpan(records, metric);
-  if (!earliest || !latest) return null;
+  const span = metadata.spanByMetric.get(metric);
+  if (!span) return null;
+  const { earliest, latest } = span;
   if (!(from && earliest > from) && !(to && latest < to)) return null;
   return `Data available ${formatDate(earliest)} – ${formatDate(latest)}, narrower than the selected period.`;
 }

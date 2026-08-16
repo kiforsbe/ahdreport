@@ -245,15 +245,26 @@ function numberFormatterFor(decimals?: number) {
 export function format(value: number, unit = "", decimals?: number) {
   return `${numberFormatterFor(decimals).format(value)}${unit ? ` ${unit}` : ""}`;
 }
-// Relies on records being sorted ascending by date (guaranteed by the parser and preserved by filtered()).
-export function dataSpan(
-  records: HealthRecord[],
-  metric: Metric,
-): { earliest?: string; latest?: string } {
-  const dates = records
-    .filter((record) => record.metric === metric)
-    .map((record) => record.date.slice(0, 10));
-  return { earliest: dates[0], latest: dates.at(-1) };
+export interface RangeMetadata {
+  presentMetrics: Set<Metric>;
+  spanByMetric: Map<Metric, { earliest: string; latest: string }>;
+}
+// Single traversal of a selected-range record array. Relies on records
+// being sorted ascending by date (guaranteed by the parser, see
+// electron/appleHealthParser.ts, and preserved by filtered()/recordRange()),
+// so a metric's first occurrence is its earliest date and every later
+// occurrence safely extends `latest`.
+export function rangeMetadata(records: readonly HealthRecord[]): RangeMetadata {
+  const presentMetrics = new Set<Metric>();
+  const spanByMetric = new Map<Metric, { earliest: string; latest: string }>();
+  for (const record of records) {
+    presentMetrics.add(record.metric);
+    const day = record.date.slice(0, 10);
+    const span = spanByMetric.get(record.metric);
+    if (span) span.latest = day;
+    else spanByMetric.set(record.metric, { earliest: day, latest: day });
+  }
+  return { presentMetrics, spanByMetric };
 }
 const dayFormatter = new Intl.DateTimeFormat(undefined);
 export function formatDate(isoDay: string) {

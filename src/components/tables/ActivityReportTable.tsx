@@ -10,6 +10,7 @@ import {
   formatDate,
   labels,
   totalBounds,
+  type RangeMetadata,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyTotalBar } from "../DailyTotalBar";
@@ -19,10 +20,12 @@ export function ActivityReportTable({
   records,
   from,
   to,
+  metadata,
 }: {
   records: HealthData["records"];
   from: string;
   to: string;
+  metadata: RangeMetadata;
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const totalsByMetric = new Map(
@@ -54,7 +57,7 @@ export function ActivityReportTable({
   const unitFor = (metric: Metric) =>
     totalsByMetric.get(metric)!.values().next().value?.unit ?? "";
   const columnNotes = activityMetrics.map((metric) => {
-    const note = coverageNote(metric, records, from, to);
+    const note = coverageNote(metric, metadata, from, to);
     return note ? `${labels[metric]} — ${note}` : null;
   });
   return (

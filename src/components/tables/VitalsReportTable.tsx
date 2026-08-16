@@ -9,6 +9,7 @@ import {
   decimalsByMetric,
   formatDate,
   labels,
+  type RangeMetadata,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyDistribution } from "../DailyDistribution";
@@ -18,10 +19,12 @@ export function VitalsReportTable({
   records,
   from,
   to,
+  metadata,
 }: {
   records: HealthData["records"];
   from: string;
   to: string;
+  metadata: RangeMetadata;
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const systolic = new Map(
@@ -88,7 +91,7 @@ export function VitalsReportTable({
       "weight",
     ] as Metric[]
   ).map((metric) => {
-    const note = coverageNote(metric, records, from, to);
+    const note = coverageNote(metric, metadata, from, to);
     return note ? `${labels[metric]} — ${note}` : null;
   });
   return (

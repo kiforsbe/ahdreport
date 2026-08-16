@@ -9,6 +9,7 @@ import {
   decimalsByMetric,
   formatDate,
   labels,
+  type RangeMetadata,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyDistribution } from "../DailyDistribution";
@@ -20,11 +21,13 @@ export function ReportTable({
   records,
   from,
   to,
+  metadata,
 }: {
   metric: Metric;
   records: HealthData["records"];
   from: string;
   to: string;
+  metadata: RangeMetadata;
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const allDays = dailyStats(records, metric);
@@ -41,7 +44,7 @@ export function ReportTable({
       <TableNotes
         notes={[
           truncationNote(days.length, allDays.length),
-          coverageNote(metric, records, from, to),
+          coverageNote(metric, metadata, from, to),
         ]}
       />
       <table>

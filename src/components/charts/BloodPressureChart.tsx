@@ -20,6 +20,7 @@ import {
   bpCategorySwedish,
   bpCategoryColorsSwedish,
   bpCategoryOrderSwedish,
+  type RangeMetadata,
 } from "../../report";
 import type { SwedishBpCategory } from "../../report";
 import { niceAxisMin } from "../../chartMath";
@@ -91,14 +92,16 @@ export function BloodPressureChart({
   records,
   from,
   to,
+  metadata,
 }: {
   records: HealthData["records"];
   from: string;
   to: string;
+  metadata: RangeMetadata;
 }) {
   const printLayout = useContext(PrintLayoutContext);
-  const sNote = coverageNote("bloodPressureSystolic", records, from, to);
-  const dNote = coverageNote("bloodPressureDiastolic", records, from, to);
+  const sNote = coverageNote("bloodPressureSystolic", metadata, from, to);
+  const dNote = coverageNote("bloodPressureDiastolic", metadata, from, to);
   const byDate = new Map<
     string,
     {

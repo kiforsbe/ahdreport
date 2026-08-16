@@ -10,6 +10,7 @@ import {
   formatDate,
   labels,
   walkingMetrics,
+  type RangeMetadata,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyDistribution } from "../DailyDistribution";
@@ -19,10 +20,12 @@ export function WalkingReportTable({
   records,
   from,
   to,
+  metadata,
 }: {
   records: HealthData["records"];
   from: string;
   to: string;
+  metadata: RangeMetadata;
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const byMetric = new Map(
@@ -50,7 +53,7 @@ export function WalkingReportTable({
   const unitFor = (metric: Metric) =>
     byMetric.get(metric)!.values().next().value?.unit ?? "";
   const columnNotes = walkingMetrics.map((metric) => {
-    const note = coverageNote(metric, records, from, to);
+    const note = coverageNote(metric, metadata, from, to);
     return note ? `${labels[metric]} — ${note}` : null;
   });
   return (
