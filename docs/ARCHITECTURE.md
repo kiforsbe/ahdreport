@@ -276,7 +276,8 @@ flowchart LR
 
 Quick ranges are 7 days, 30 days, 90 days, last 365 days, year-to-date, and all time.
 The primary overview uses the 30 days ending at `to`; last-year and all-time summaries
-are present in collapsed `<details>` sections.
+are present in collapsed `<details>` sections. Those sections' card values are computed
+lazily, on first open, via `LazyDisclosure`.
 
 The four overview metrics are weight, heart rate, steps, and sleep. Weight shows the
 latest reading plus first-to-last delta. The others show medians and ranges. Heart-rate
