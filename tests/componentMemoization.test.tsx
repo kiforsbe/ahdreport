@@ -13,13 +13,23 @@ const records: HealthRecord[] = [
   { metric: "weight", date: "2026-01-02T09:00:00.000Z", value: 71, unit: "kg" },
 ];
 
-function NoticeHarness({ children }: { children: ReactNode }) {
+/**
+ * Renders `target()` fresh on every NoticeHarness render — a new element
+ * object each time, not a `children` prop captured once at the outer
+ * `render()` call. A `children` prop stays the same element reference
+ * across a parent-only re-render, so React's own element-identity bailout
+ * would skip the subtree regardless of whether the child is React.memo'd,
+ * making the memoization assertion below pass even with memo removed. A
+ * fresh element each render forces React to actually reconcile props
+ * against the child's memo comparison, which is the behavior under test.
+ */
+function NoticeHarness({ target }: { target: () => ReactNode }) {
   const [notice, setNotice] = useState("");
   return (
     <div>
       <button onClick={() => setNotice("unrelated update")}>trigger</button>
       {notice && <p>{notice}</p>}
-      {children}
+      {target()}
     </div>
   );
 }
@@ -30,9 +40,7 @@ describe("chart/table memoization", () => {
   it("MetricChart does not recompute daily() when only unrelated notice state changes", () => {
     const dailySpy = vi.spyOn(report, "daily");
     render(
-      <NoticeHarness>
-        <MetricChart metric="weight" records={records} />
-      </NoticeHarness>,
+      <NoticeHarness target={() => <MetricChart metric="weight" records={records} />} />,
     );
     const callsAfterMount = dailySpy.mock.calls.length;
     fireEvent.click(screen.getByText("trigger"));
@@ -70,9 +78,11 @@ describe("chart/table memoization", () => {
     const statsSpy = vi.spyOn(report, "dailyStats");
     const metadata = rangeMetadata(records);
     render(
-      <NoticeHarness>
-        <ReportTable metric="weight" records={records} from="" to="" metadata={metadata} />
-      </NoticeHarness>,
+      <NoticeHarness
+        target={() => (
+          <ReportTable metric="weight" records={records} from="" to="" metadata={metadata} />
+        )}
+      />,
     );
     const callsAfterMount = statsSpy.mock.calls.length;
     fireEvent.click(screen.getByText("trigger"));
