@@ -11,7 +11,8 @@
     "build": "npm run build:renderer && npm run build:electron",
     "build:renderer": "vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@types/react": "^19.0.0",
@@ -23,6 +24,8 @@
     "recharts": "^2.15.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
     "@types/jszip": "^3.4.1",
     "@types/node": "^22.10.1",
     "@vitejs/plugin-react": "^4.3.4",
@@ -30,6 +33,7 @@
     "cross-env": "^7.0.3",
     "electron": "^43.3.0",
     "fast-check": "^4.9.0",
+    "jsdom": "^30.0.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "vitest": "^4.1.10",
