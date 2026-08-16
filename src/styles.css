@@ -295,6 +295,11 @@ header span {
 .print-layout .grid {
   grid-template-columns: 1fr;
 }
+.print-layout .panel,
+.print-layout .report-section {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
 .print-layout .detailed-report-toggle {
   display: none;
 }
@@ -305,6 +310,8 @@ main.print-layout {
 .panel {
   padding: 18px;
   min-width: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
 }
 .panel h3 {
   margin: 0 0 7px;
@@ -370,6 +377,8 @@ main.print-layout {
 .report-section {
   break-inside: avoid;
   margin: 28px 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
 }
 .report-section h3 {
   font-size: 16px;
@@ -497,6 +506,8 @@ td:nth-child(2) {
   }
   .panel {
     break-inside: avoid;
+    content-visibility: visible;
+    contain-intrinsic-size: none;
   }
   .dashboard .table-notes,
   .dashboard .bp-legend,
@@ -509,6 +520,8 @@ td:nth-child(2) {
   }
   .report-section {
     page-break-inside: avoid;
+    content-visibility: visible;
+    contain-intrinsic-size: none;
   }
   table {
     font-size: 9px;
