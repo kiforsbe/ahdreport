@@ -23,6 +23,34 @@ describe("Apple Health parser", () => {
     await expect(
       parseAppleHealthExport(Buffer.from("<xml/>"), "export.xml"),
     ).rejects.toThrow("not a valid Apple Health export"));
+
+  it("imports symptom intervals, preserves category values, and removes duplicates", async () => {
+    const symptomXml = `<?xml version="1.0"?><HealthData><Record type="HKCategoryTypeIdentifierHeadache" sourceName="Health" value="HKCategoryValueSeverityModerate" startDate="2026-01-02 08:00:00 +0000" endDate="2026-01-02 12:00:00 +0000"/><Record type="HKCategoryTypeIdentifierHeadache" sourceName="Health" value="HKCategoryValueSeverityModerate" startDate="2026-01-02 08:00:00 +0000" endDate="2026-01-02 12:00:00 +0000"/><Record type="HKCategoryTypeIdentifierDizziness" sourceName="Watch" value="HKCategoryValuePresencePresent" startDate="2026-01-01 09:00:00 +0000"/><Record type="Unknown" value="1" startDate="2026-01-03 06:00:00 +0000"/><Record type="HKCategoryTypeIdentifierFatigue" sourceName="Health" value="HKCategoryValuePresencePresent" startDate="not-a-date" endDate="2026-01-03 06:00:00 +0000"/></HealthData>`;
+    const result = await parseAppleHealthExport(
+      Buffer.from(symptomXml),
+      "export.xml",
+    );
+    expect(result.symptoms).toEqual([
+      {
+        symptom: "dizziness",
+        start: "2026-01-01T09:00:00.000Z",
+        end: "2026-01-01T09:00:00.000Z",
+        value: "HKCategoryValuePresencePresent",
+        source: "Watch",
+      },
+      {
+        symptom: "headache",
+        start: "2026-01-02T08:00:00.000Z",
+        end: "2026-01-02T12:00:00.000Z",
+        value: "HKCategoryValueSeverityModerate",
+        source: "Health",
+      },
+    ]);
+    expect(result.diagnostics.unsupported).toBe(1);
+    expect(result.diagnostics.imported).toBe(2);
+    expect(result.diagnostics.earliest).toBe("2026-01-01T09:00:00.000Z");
+    expect(result.diagnostics.latest).toBe("2026-01-02T08:00:00.000Z");
+  });
 });
 
 describe("clinical data in Apple Health ZIP exports", () => {

@@ -25,6 +25,48 @@ export type Metric =
   | "fat"
   | "medication";
 
+export type SymptomId =
+  | "abdominalCramps"
+  | "acne"
+  | "appetiteChanges"
+  | "bladderIncontinence"
+  | "bloating"
+  | "breastPain"
+  | "chestTightnessOrPain"
+  | "chills"
+  | "constipation"
+  | "coughing"
+  | "diarrhea"
+  | "dizziness"
+  | "drySkin"
+  | "fainting"
+  | "fatigue"
+  | "fever"
+  | "generalizedBodyAche"
+  | "headache"
+  | "heartburn"
+  | "hotFlashes"
+  | "hairLoss"
+  | "lossOfSmell"
+  | "lossOfTaste"
+  | "lowerBackPain"
+  | "memoryLapse"
+  | "menstrualCramps"
+  | "moodChanges"
+  | "nausea"
+  | "nightSweats"
+  | "pelvicPain"
+  | "rapidPoundingOrFlutteringHeartbeat"
+  | "runnyNose"
+  | "shortnessOfBreath"
+  | "sinusCongestion"
+  | "skippedHeartbeat"
+  | "soreThroat"
+  | "sleepChanges"
+  | "vaginalDryness"
+  | "vomiting"
+  | "wheezing";
+
 export interface HealthRecord {
   metric: Metric;
   date: string;
@@ -32,6 +74,13 @@ export interface HealthRecord {
   unit: string;
   source?: string;
   category?: string;
+}
+export interface SymptomRecord {
+  symptom: SymptomId;
+  start: string;
+  end: string;
+  value: string;
+  source?: string;
 }
 export interface ImportDiagnostics {
   fileName: string;
@@ -50,6 +99,7 @@ export interface PatientDetails {
 }
 export interface HealthData {
   records: HealthRecord[];
+  symptoms: SymptomRecord[];
   diagnostics: ImportDiagnostics;
   patient?: PatientDetails;
 }

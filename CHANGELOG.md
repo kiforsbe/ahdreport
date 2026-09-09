@@ -6,6 +6,9 @@ All notable changes to AHDReport are documented in this file.
 
 ### Changed
 
+- Added read-only Apple Health symptom tracking with duration-aware timelines,
+  optional numeric-chart overlays, descriptive same-day comparisons, detailed
+  episode rows, and CSV/XLSX export support.
 - Cached the `Intl.NumberFormat`/`Intl.DateTimeFormat` instances behind
   `format()`/`formatDate()` in `report.ts` instead of constructing them on
   every call, and routed table rows and chart tooltips through the shared

@@ -187,13 +187,16 @@ sequenceDiagram
 
 For a ZIP, the parser finds an entry whose path ends in `export.xml`. The main Apple
 Health XML is currently read and parsed in full with `fast-xml-parser`. Each supported
-HealthKit type maps to an internal `Metric`; unsupported types increment a diagnostic
+HealthKit quantity maps to an internal `Metric`; symptom category types map to a
+separate `SymptomRecord` event stream. Unsupported types increment a diagnostic
 counter. Invalid dates and non-numeric values are skipped.
 
 Sleep records are converted from their start/end timestamps to duration in hours.
-Exact duplicates are removed using metric, normalized timestamp, value, unit, and
-source name. The parser returns imported count, unsupported count, earliest/latest
-timestamps, and warnings such as missing medication data or unreadable clinical data.
+Symptoms preserve their category value and normalized start/end timestamps so duration
+can be displayed without converting the event into a numeric metric. Exact duplicates
+are removed using metric or symptom id, normalized timestamps, value, unit, and source
+name. The parser returns imported count, unsupported count, earliest/latest timestamps,
+and warnings such as missing medication data or unreadable clinical data.
 
 ### 5.2 CDA patient extraction
 
@@ -257,16 +260,20 @@ list containing name, personnummer, date of birth, and sex.
 - date inputs keep local drafts and debounce updates by 300 ms.
 - `notice` contains import/export feedback.
 - `printLayout` selects the dedicated PDF-safe chart tree.
+- `selectedSymptom` and `showSymptomOverlay` control local symptom chart context.
 - `patientProfile` is a ref so editing demographics does not rerender the report.
 
 ```mermaid
 flowchart LR
     Imported["HealthData.records"] --> Selected["filtered(from, to)"]
+    ImportedSymptoms["HealthData.symptoms"] --> SelectedSymptoms["filteredSymptoms(from, to)"]
     Imported --> Last30["filtered(last 30 days, to)"]
     Imported --> Last365["filtered(last 365 days, to)"]
     Imported --> AllTime["filtered(beginning, to)"]
 
     Selected --> Daily["daily / dailyTotals / dailyStats"]
+    SelectedSymptoms --> SymptomViews["timeline / associations / episode table"]
+    SelectedSymptoms --> ChartOverlays["optional chart overlays"]
     Daily --> Charts
     Daily --> DetailTables["Detailed daily tables"]
     Last30 --> Cards30["Visible overview cards"]
@@ -286,7 +293,7 @@ displayed minimum and maximum.
 
 ## 8. Visualization and detailed report composition
 
-Dashboard groups are Vitals, Sleep & activity, and Mobility. Most standard metric
+Dashboard groups are Symptoms, Vitals, Sleep & activity, and Mobility. Most standard metric
 trends use Recharts area charts. Blood pressure uses a composed chart with systolic and
 diastolic daily ranges plus an average tick; the UI does not describe these series as
 "upper" or "lower". Heart rate, walking speed, step length, walking asymmetry, and
@@ -294,11 +301,18 @@ double support use the same daily min–max range bars with an average tick. The
 charts also include a dashed overall-average reference line and a legend explaining the
 daily range, tick, and benchmark.
 
+Symptoms are rendered in a dedicated context-events section before Vitals. The section
+contains summary cards, duration-aware event lanes, and same-day median comparisons for
+selected numeric metrics. A selected symptom can optionally add translucent duration
+bands and dashed onset markers to numeric charts. All comparison copy is descriptive and
+explicitly avoids causal or diagnostic claims.
+
 The detailed section is part of the same React document and is available in both viewer
 and PDF modes. In the viewer it is lazily mounted behind a "Show detailed measurements"
 disclosure and is force-mounted during print preparation. It contains specialized tables:
 
 - `VitalsReportTable` combines pressure, heart rate, and weight.
+- `SymptomsReportTable` lists imported symptom episodes with duration and same-day context.
 - `ActivityReportTable` shows per-day totals as in-cell bars.
 - `WalkingReportTable` combines mobility metrics.
 - `ReportTable` handles remaining supported metrics.
@@ -320,11 +334,13 @@ not React state, so opening it does not rerender the potentially large dashboard
 detailed tables.
 
 CSV and XLSX exports contain records in the selected report period, newest first, with
-date, display metric name, value, unit, source, and category columns. CSV includes a
-UTF-8 BOM for spreadsheet compatibility and quotes spreadsheet-sensitive values. XLSX
-is assembled in the renderer as a minimal Open XML workbook with JSZip, which is loaded
-only when Excel export is requested. The content is passed through the narrow preload
-bridge; the main process still owns the destination chooser and write.
+date, display metric name, value, unit, source, and category columns. CSV also marks
+rows as measurements or symptoms and includes symptom interval fields. XLSX keeps the
+measurement sheet and adds a dedicated Symptoms worksheet. CSV includes a UTF-8 BOM for
+spreadsheet compatibility and quotes spreadsheet-sensitive values. XLSX is assembled in
+the renderer as a minimal Open XML workbook with JSZip, which is loaded only when Excel
+export is requested. The content is passed through the narrow preload bridge; the main
+process still owns the destination chooser and write.
 
 ### 9.2 PDF export protocol
 

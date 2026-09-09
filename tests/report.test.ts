@@ -22,6 +22,7 @@ import {
   rangeMetadata,
 } from "../src/report";
 import type { HealthRecord } from "../src/shared/types";
+import type { SymptomRecord } from "../src/shared/types";
 const rows: HealthRecord[] = [
   { metric: "weight", date: "2026-01-01T09:00:00.000Z", value: 70, unit: "kg" },
   { metric: "weight", date: "2026-01-01T12:00:00.000Z", value: 72, unit: "kg" },
@@ -342,6 +343,109 @@ describe("rangeMetadata", () => {
     expect(metadata.spanByMetric.get("steps")).toEqual({
       earliest: "2026-01-05",
       latest: "2026-01-05",
+    });
+  });
+});
+
+describe("symptom report helpers", () => {
+  const symptoms: SymptomRecord[] = [
+    {
+      symptom: "headache",
+      start: "2026-01-01T08:00:00.000Z",
+      end: "2026-01-01T12:00:00.000Z",
+      value: "HKCategoryValuePresencePresent",
+    },
+    {
+      symptom: "headache",
+      start: "2026-01-02T08:00:00.000Z",
+      end: "2026-01-02T10:00:00.000Z",
+      value: "HKCategoryValuePresencePresent",
+    },
+    {
+      symptom: "dizziness",
+      start: "2026-01-02T13:00:00.000Z",
+      end: "2026-01-02T13:00:00.000Z",
+      value: "HKCategoryValuePresencePresent",
+    },
+    {
+      symptom: "fatigue",
+      start: "2026-01-03T00:00:00.000Z",
+      end: "2026-01-04T00:00:00.000Z",
+      value: "HKCategoryValuePresencePresent",
+    },
+  ];
+
+  it("summarizes episodes and expands multi-day events into symptom days", async () => {
+    const report = await import("../src/report");
+    expect(report.symptomSummary(symptoms)).toMatchObject({
+      episodeCount: 4,
+      symptomCount: 3,
+      symptomDays: 4,
+      medianDurationHours: 3,
+    });
+    expect(report.symptomDays(symptoms, "2026-01-01", "2026-01-03")).toEqual([
+      { date: "2026-01-01", symptoms: ["headache"], episodeCount: 1 },
+      {
+        date: "2026-01-02",
+        symptoms: ["dizziness", "headache"],
+        episodeCount: 2,
+      },
+      { date: "2026-01-03", symptoms: ["fatigue"], episodeCount: 1 },
+    ]);
+    expect(report.symptomEpisodes(symptoms)[0]).toMatchObject({
+      symptom: "fatigue",
+      durationHours: 24,
+      key: "fatigue|2026-01-03T00:00:00.000Z|2026-01-04T00:00:00.000Z",
+    });
+  });
+
+  it("keeps symptom intervals that overlap the selected date range", async () => {
+    const report = await import("../src/report");
+    expect(report.filteredSymptoms(symptoms, "2026-01-02", "2026-01-02")).toHaveLength(2);
+    expect(report.filteredSymptoms(symptoms, "2026-01-05", "2026-01-06")).toEqual([]);
+  });
+
+  it("compares symptom-day and other-day medians only with enough coverage", async () => {
+    const associationSymptoms = symptoms.slice(0, 2).concat({
+      symptom: "fatigue",
+      start: "2026-01-03T00:00:00.000Z",
+      end: "2026-01-03T00:00:00.000Z",
+      value: "HKCategoryValuePresencePresent",
+    });
+    const records: HealthRecord[] = [
+      ...[70, 71, 72].map((value, index) => ({
+        metric: "heartRate" as const,
+        date: `2026-01-0${index + 1}T12:00:00.000Z`,
+        value,
+        unit: "count/min",
+      })),
+      ...[60, 61, 62].map((value, index) => ({
+        metric: "heartRate" as const,
+        date: `2026-01-0${index + 4}T12:00:00.000Z`,
+        value,
+        unit: "count/min",
+      })),
+      ...[6, 5, 7, 8, 8].map((value, index) => ({
+        metric: "sleep" as const,
+        date: `2026-01-0${index + 1}T12:00:00.000Z`,
+        value,
+        unit: "hr",
+      })),
+    ];
+    const report = await import("../src/report");
+    const associations = report.symptomAssociations(associationSymptoms, records);
+    expect(associations.find((item) => item.metric === "heartRate")).toMatchObject({
+      symptomDays: 3,
+      otherDays: 3,
+      symptomMedian: 71,
+      otherMedian: 61,
+      difference: 10,
+      unit: "count/min",
+    });
+    expect(associations.find((item) => item.metric === "sleep")).toMatchObject({
+      symptomDays: 3,
+      otherDays: 2,
+      difference: undefined,
     });
   });
 });

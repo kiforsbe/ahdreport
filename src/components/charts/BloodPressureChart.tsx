@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { HealthData } from "../../shared/types";
+import type { HealthData, SymptomId, SymptomRecord } from "../../shared/types";
 import {
   colorsByMetric,
   dailyStats,
@@ -27,6 +27,7 @@ import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { coverageNote } from "../TableNotes";
 import { bpRangeBarShape } from "./bpChartShapes";
+import { SymptomOverlay } from "../SymptomOverlay";
 
 const categoryShortLabelsSwedish: Record<SwedishBpCategory, string> = {
   Optimal: "Optimal",
@@ -93,11 +94,17 @@ export const BloodPressureChart = memo(function BloodPressureChart({
   from,
   to,
   metadata,
+  symptoms = [],
+  selectedSymptom,
+  showSymptomOverlay = false,
 }: {
   records: HealthData["records"];
   from: string;
   to: string;
   metadata: RangeMetadata;
+  symptoms?: SymptomRecord[];
+  selectedSymptom?: SymptomId;
+  showSymptomOverlay?: boolean;
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const sNote = coverageNote("bloodPressureSystolic", metadata, from, to);
@@ -292,15 +299,33 @@ export const BloodPressureChart = memo(function BloodPressureChart({
         </div>
       )}
       {printLayout ? (
-        <div data-pdf-chart-ready="true">{chart(680, 260)}</div>
+        <div className="chart-with-symptom-overlay">
+          <div data-pdf-chart-ready="true">{chart(680, 260)}</div>
+          <SymptomOverlay
+            symptoms={symptoms}
+            from={from}
+            to={to}
+            selectedSymptom={selectedSymptom}
+            visible={showSymptomOverlay}
+          />
+        </div>
       ) : (
-        <ResponsiveContainer
-          key="blood-pressure-screen"
-          width="100%"
-          height={210}
-        >
-          {chart()}
-        </ResponsiveContainer>
+        <div className="chart-with-symptom-overlay">
+          <ResponsiveContainer
+            key="blood-pressure-screen"
+            width="100%"
+            height={210}
+          >
+            {chart()}
+          </ResponsiveContainer>
+          <SymptomOverlay
+            symptoms={symptoms}
+            from={from}
+            to={to}
+            selectedSymptom={selectedSymptom}
+            visible={showSymptomOverlay}
+          />
+        </div>
       )}
       {!printLayout && (
         <div className="bp-legend">

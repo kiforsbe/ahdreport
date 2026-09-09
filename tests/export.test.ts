@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { createCsv, createExcel, exportRows } from "../src/export";
-import type { HealthRecord } from "../src/shared/types";
+import type { HealthRecord, SymptomRecord } from "../src/shared/types";
 
 const ascending: HealthRecord[] = [
   { metric: "steps", date: "2026-01-01T08:00:00.000Z", value: 100, unit: "count" },
@@ -35,6 +35,23 @@ describe("createCsv", () => {
     expect(lines[1]).toContain("2026-01-03");
     expect(lines.at(-1)).toContain("2026-01-01");
   });
+
+  it("includes symptom events as typed rows", () => {
+    const symptoms: SymptomRecord[] = [
+      {
+        symptom: "headache",
+        start: "2026-01-02T08:00:00.000Z",
+        end: "2026-01-02T12:00:00.000Z",
+        value: "HKCategoryValueSeverityModerate",
+        source: "Health",
+      },
+    ];
+    const csv = createCsv(ascending, symptoms).replace(/^﻿/, "");
+    expect(csv.split("\r\n")[0]).toContain("Record type");
+    expect(csv).toContain("symptom");
+    expect(csv).toContain("Headache");
+    expect(csv).toContain("4.0");
+  });
 });
 
 describe("createExcel", () => {
@@ -48,5 +65,24 @@ describe("createExcel", () => {
       sheet.match(new RegExp(`<row r="${lastRowNumber}">([\\s\\S]*?)</row>`))?.[1] ?? "";
     expect(firstDataRow).toContain("2026-01-03");
     expect(lastDataRow).toContain("2026-01-01");
+  });
+
+  it("writes symptom events to a dedicated Symptoms worksheet", async () => {
+    const symptoms: SymptomRecord[] = [
+      {
+        symptom: "dizziness",
+        start: "2026-01-02T08:00:00.000Z",
+        end: "2026-01-02T08:30:00.000Z",
+        value: "HKCategoryValuePresencePresent",
+        source: "Watch",
+      },
+    ];
+    const base64 = await createExcel(ascending, symptoms);
+    const zip = await JSZip.loadAsync(base64, { base64: true });
+    const workbook = await zip.file("xl/workbook.xml")!.async("string");
+    const symptomsSheet = await zip.file("xl/worksheets/sheet2.xml")!.async("string");
+    expect(workbook).toContain('name="Symptoms"');
+    expect(symptomsSheet).toContain("Dizziness");
+    expect(symptomsSheet).toContain("0.5");
   });
 });

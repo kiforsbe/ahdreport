@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import type { HealthData } from "./shared/types";
+import type { HealthData, SymptomId } from "./shared/types";
 import {
   MAX_PDF_TABLE_ROWS,
   MAX_TABLE_ROWS,
   activityMetrics,
   bpMetrics,
   filtered,
+  filteredSymptoms,
   labels,
   metricGroups,
   nutritionMetrics,
@@ -33,6 +34,8 @@ import { VitalsReportTable } from "./components/tables/VitalsReportTable";
 import { WalkingReportTable } from "./components/tables/WalkingReportTable";
 import { ActivityReportTable } from "./components/tables/ActivityReportTable";
 import { NutritionReportTable } from "./components/tables/NutritionReportTable";
+import { SymptomOverview } from "./components/SymptomOverview";
+import { SymptomsReportTable } from "./components/tables/SymptomsReportTable";
 
 function rangeDate(days: number, end: string) {
   const d = end ? new Date(`${end}T12:00:00`) : new Date();
@@ -51,11 +54,17 @@ export function App() {
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const patientProfile = useRef<PatientProfile>(emptyPatientProfile);
   const [notice, setNotice] = useState("");
+  const [selectedSymptom, setSelectedSymptom] = useState<SymptomId>();
+  const [showSymptomOverlay, setShowSymptomOverlay] = useState(false);
   const records = useMemo(
     () => (data ? filtered(data.records, from, to) : []),
     [data, from, to],
   );
   const metadata = useMemo(() => rangeMetadata(records), [records]);
+  const symptoms = useMemo(
+    () => (data ? filteredSymptoms(data.symptoms, from, to) : []),
+    [data, from, to],
+  );
   const overviewRecords = useMemo(
     () => (data ? filtered(data.records, rangeDate(30, to), to) : []),
     [data, to],
@@ -68,6 +77,13 @@ export function App() {
     () => (data ? filtered(data.records, "", to) : []),
     [data, to],
   );
+  useEffect(() => {
+    if (
+      selectedSymptom &&
+      !symptoms.some((symptom) => symptom.symptom === selectedSymptom)
+    )
+      setSelectedSymptom(undefined);
+  }, [selectedSymptom, symptoms]);
   useEffect(() => {
     const printWindow = window as Window & {
       healthAtlasPrintLayout?: (
@@ -194,7 +210,9 @@ export function App() {
   }
   async function dataExport(format: "csv" | "xlsx") {
     const content =
-      format === "csv" ? createCsv(records) : await createExcel(records);
+      format === "csv"
+        ? createCsv(records, symptoms)
+        : await createExcel(records, symptoms);
     const result = await window.healthAPI.exportData(format, content);
     if (!result.canceled)
       setNotice(`${format === "csv" ? "CSV" : "Excel"} file saved to ${result.path}`);
@@ -328,6 +346,16 @@ export function App() {
         periodLabel="All time"
         collapsible
       />
+      <SymptomOverview
+        symptoms={symptoms}
+        records={records}
+        from={from}
+        to={to}
+        selectedSymptom={selectedSymptom}
+        onSelectedSymptomChange={setSelectedSymptom}
+        showOverlay={showSymptomOverlay}
+        onShowOverlayChange={setShowSymptomOverlay}
+      />
       <section className="dashboard">
         {metricGroups.map((group) => (
           <section key={group.title} className="group">
@@ -337,7 +365,15 @@ export function App() {
             )}
             <div className="grid">
               {group.title === "Vitals" && hasBloodPressure && (
-                <BloodPressureChart records={records} from={from} to={to} metadata={metadata} />
+                <BloodPressureChart
+                  records={records}
+                  from={from}
+                  to={to}
+                  metadata={metadata}
+                  symptoms={symptoms}
+                  selectedSymptom={selectedSymptom}
+                  showSymptomOverlay={showSymptomOverlay}
+                />
               )}{" "}
               {group.title === "Vitals" && hasBloodPressure && (
                 <PulsePressureChart records={records} />
@@ -357,7 +393,13 @@ export function App() {
                       {!printLayout && note && (
                         <small className="table-notes">{note}</small>
                       )}
-                      <MetricChart metric={m} records={records} />
+                      <MetricChart
+                        metric={m}
+                        records={records}
+                        symptoms={symptoms}
+                        selectedSymptom={selectedSymptom}
+                        showSymptomOverlay={showSymptomOverlay}
+                      />
                     </article>
                   );
                 })}
@@ -374,7 +416,13 @@ export function App() {
       <section className="panel medication">
         <h2>Medication</h2>
         {medicationPresent ? (
-          <MetricChart metric="medication" records={records} />
+          <MetricChart
+            metric="medication"
+            records={records}
+            symptoms={symptoms}
+            selectedSymptom={selectedSymptom}
+            showSymptomOverlay={showSymptomOverlay}
+          />
         ) : (
           <p>
             Medication records are not available in this Apple Health export.
@@ -444,6 +492,13 @@ export function App() {
         >
           {() => (
             <>
+              <SymptomsReportTable
+                symptoms={symptoms}
+                records={records}
+                from={from}
+                to={to}
+                printLayout={printLayout}
+              />
               <VitalsReportTable records={records} from={from} to={to} metadata={metadata} />
               <ActivityReportTable records={records} from={from} to={to} metadata={metadata} />
               <WalkingReportTable records={records} from={from} to={to} metadata={metadata} />

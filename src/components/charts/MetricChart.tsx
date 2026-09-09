@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { HealthData, Metric } from "../../shared/types";
+import type { HealthData, Metric, SymptomId, SymptomRecord } from "../../shared/types";
 import {
   colorsByMetric,
   daily,
@@ -27,16 +27,31 @@ import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { RangeMetricChart } from "./RangeMetricChart";
 import { CarbsChart } from "./CarbsChart";
 import { outlierDot } from "./outlierHelpers";
+import { SymptomOverlay } from "../SymptomOverlay";
 
 export const MetricChart = memo(function MetricChart({
   metric,
   records,
+  symptoms = [],
+  selectedSymptom,
+  showSymptomOverlay = false,
 }: {
   metric: Metric;
   records: HealthData["records"];
+  symptoms?: SymptomRecord[];
+  selectedSymptom?: SymptomId;
+  showSymptomOverlay?: boolean;
 }) {
   if (metric === "heartRate" || walkingMetrics.includes(metric))
-    return <RangeMetricChart metric={metric} records={records} />;
+    return (
+      <RangeMetricChart
+        metric={metric}
+        records={records}
+        symptoms={symptoms}
+        selectedSymptom={selectedSymptom}
+        showSymptomOverlay={showSymptomOverlay}
+      />
+    );
   if (metric === "carbs") return <CarbsChart records={records} />;
   const printLayout = useContext(PrintLayoutContext);
   const color = colorsByMetric[metric];
@@ -101,12 +116,30 @@ export const MetricChart = memo(function MetricChart({
     </ComposedChart>
   );
   if (printLayout)
-    return <div data-pdf-chart-ready="true">{chart(680, 260)}</div>;
+    return (
+      <div className="chart-with-symptom-overlay">
+        <div data-pdf-chart-ready="true">{chart(680, 260)}</div>
+        <SymptomOverlay
+          symptoms={symptoms}
+          from={rows[0].date}
+          to={rows.at(-1)!.date}
+          selectedSymptom={selectedSymptom}
+          visible={showSymptomOverlay}
+        />
+      </div>
+    );
   return (
-    <>
+    <div className="chart-with-symptom-overlay">
       <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
         {chart()}
       </ResponsiveContainer>
-    </>
+      <SymptomOverlay
+        symptoms={symptoms}
+        from={rows[0].date}
+        to={rows.at(-1)!.date}
+        selectedSymptom={selectedSymptom}
+        visible={showSymptomOverlay}
+      />
+    </div>
   );
 });

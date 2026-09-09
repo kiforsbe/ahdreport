@@ -1,4 +1,4 @@
-import type { HealthRecord, Metric } from "./shared/types";
+import type { HealthRecord, Metric, SymptomId, SymptomRecord } from "./shared/types";
 
 export const labels: Record<Metric, string> = {
   weight: "Weight",
@@ -115,6 +115,51 @@ export const metricGroups: { title: string; metrics: Metric[] }[] = [
     metrics: ["dietaryEnergy", "carbs", "sugar", "fiber", "protein", "fat"],
   },
 ];
+export const symptomLabels: Record<SymptomId, string> = {
+  abdominalCramps: "Abdominal cramps",
+  acne: "Acne",
+  appetiteChanges: "Appetite changes",
+  bladderIncontinence: "Bladder incontinence",
+  bloating: "Bloating",
+  breastPain: "Breast pain",
+  chestTightnessOrPain: "Chest tightness or pain",
+  chills: "Chills",
+  constipation: "Constipation",
+  coughing: "Coughing",
+  diarrhea: "Diarrhea",
+  dizziness: "Dizziness",
+  drySkin: "Dry skin",
+  fainting: "Fainting",
+  fatigue: "Fatigue",
+  fever: "Fever",
+  generalizedBodyAche: "Generalized body ache",
+  headache: "Headache",
+  heartburn: "Heartburn",
+  hotFlashes: "Hot flashes",
+  hairLoss: "Hair loss",
+  lossOfSmell: "Loss of smell",
+  lossOfTaste: "Loss of taste",
+  lowerBackPain: "Lower back pain",
+  memoryLapse: "Memory lapse",
+  menstrualCramps: "Menstrual cramps",
+  moodChanges: "Mood changes",
+  nausea: "Nausea",
+  nightSweats: "Night sweats",
+  pelvicPain: "Pelvic pain",
+  rapidPoundingOrFlutteringHeartbeat: "Rapid, pounding, or fluttering heartbeat",
+  runnyNose: "Runny nose",
+  shortnessOfBreath: "Shortness of breath",
+  sinusCongestion: "Sinus congestion",
+  skippedHeartbeat: "Skipped heartbeat",
+  soreThroat: "Sore throat",
+  sleepChanges: "Sleep changes",
+  vaginalDryness: "Vaginal dryness",
+  vomiting: "Vomiting",
+  wheezing: "Wheezing",
+};
+export function symptomLabel(symptom: SymptomId) {
+  return symptomLabels[symptom];
+}
 export interface RecordRange {
   start: number;
   end: number; // exclusive
@@ -182,6 +227,137 @@ export function recordRange(
 export function filtered(records: HealthRecord[], from: string, to: string) {
   const { start, end } = recordRange(records, from, to);
   return records.slice(start, end);
+}
+function symptomDay(value: string) {
+  return value.slice(0, 10);
+}
+function datesBetween(start: string, end: string) {
+  const dates: string[] = [];
+  const current = new Date(`${start}T00:00:00Z`);
+  const last = new Date(`${end}T00:00:00Z`);
+  if (!Number.isFinite(current.getTime()) || !Number.isFinite(last.getTime())) return dates;
+  while (current <= last) {
+    dates.push(current.toISOString().slice(0, 10));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return dates;
+}
+export function filteredSymptoms(
+  symptoms: SymptomRecord[],
+  from: string,
+  to: string,
+) {
+  return symptoms.filter((symptom) => {
+    const start = symptomDay(symptom.start);
+    const end = symptomDay(symptom.end);
+    return (!from || end >= from) && (!to || start <= to);
+  });
+}
+export function symptomEpisodes(symptoms: SymptomRecord[]) {
+  return symptoms
+    .map((symptom) => ({
+      ...symptom,
+      durationHours: Math.max(
+        0,
+        (Date.parse(symptom.end) - Date.parse(symptom.start)) / 3_600_000,
+      ),
+      key: `${symptom.symptom}|${symptom.start}|${symptom.end}`,
+    }))
+    .sort((a, b) => b.start.localeCompare(a.start));
+}
+export function symptomDays(
+  symptoms: SymptomRecord[],
+  from: string,
+  to: string,
+) {
+  const days = new Map<string, { symptoms: Set<SymptomId>; episodeCount: number }>();
+  filteredSymptoms(symptoms, from, to).forEach((symptom) => {
+    const start = symptomDay(symptom.start);
+    const end = symptomDay(symptom.end);
+    datesBetween(start, end).forEach((date) => {
+      if ((from && date < from) || (to && date > to)) return;
+      const day = days.get(date) ?? { symptoms: new Set<SymptomId>(), episodeCount: 0 };
+      day.symptoms.add(symptom.symptom);
+      day.episodeCount++;
+      days.set(date, day);
+    });
+  });
+  return [...days]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, day]) => ({
+      date,
+      symptoms: [...day.symptoms].sort(),
+      episodeCount: day.episodeCount,
+    }));
+}
+function medianValues(values: number[]) {
+  if (!values.length) return undefined;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+export function symptomSummary(symptoms: SymptomRecord[]) {
+  const episodes = symptomEpisodes(symptoms);
+  const days = symptomDays(symptoms, "", "");
+  const bySymptom = [...new Set(symptoms.map((symptom) => symptom.symptom))]
+    .map((symptom) => {
+      const rows = episodes.filter((row) => row.symptom === symptom);
+      const symptomDayCount = new Set(
+        symptomDays(rows, "", "").map((row) => row.date),
+      ).size;
+      return {
+        symptom,
+        episodes: rows.length,
+        days: symptomDayCount,
+        durationHours: medianValues(rows.map((row) => row.durationHours)) ?? 0,
+      };
+    })
+    .sort((a, b) => b.episodes - a.episodes || a.symptom.localeCompare(b.symptom));
+  return {
+    episodeCount: episodes.length,
+    symptomCount: bySymptom.length,
+    symptomDays: days.length,
+    medianDurationHours: medianValues(episodes.map((row) => row.durationHours)),
+    bySymptom,
+  };
+}
+const symptomAssociationMetrics: Metric[] = [
+  "heartRate",
+  "restingHeartRate",
+  "bloodPressureSystolic",
+  "bloodPressureDiastolic",
+  "bodyTemperature",
+  "sleep",
+  "steps",
+];
+export function symptomAssociations(
+  symptoms: SymptomRecord[],
+  records: HealthRecord[],
+) {
+  const symptomDateSet = new Set(symptomDays(symptoms, "", "").map((day) => day.date));
+  return symptomAssociationMetrics.map((metric) => {
+    const rows = daily(records, metric);
+    const symptomRows = rows.filter((row) => symptomDateSet.has(row.date));
+    const otherRows = rows.filter((row) => !symptomDateSet.has(row.date));
+    const symptomMedian = medianValues(symptomRows.map((row) => row.value));
+    const otherMedian = medianValues(otherRows.map((row) => row.value));
+    const enough = symptomRows.length >= 3 && otherRows.length >= 3;
+    return {
+      metric,
+      label: labels[metric],
+      symptomDays: symptomRows.length,
+      otherDays: otherRows.length,
+      symptomMedian: enough ? symptomMedian : undefined,
+      otherMedian: enough ? otherMedian : undefined,
+      difference:
+        enough && symptomMedian !== undefined && otherMedian !== undefined
+          ? symptomMedian - otherMedian
+          : undefined,
+      unit: rows[0]?.unit,
+    };
+  });
 }
 export function latest(records: HealthRecord[], metric: Metric) {
   return records

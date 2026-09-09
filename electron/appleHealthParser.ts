@@ -5,6 +5,8 @@ import type {
   HealthRecord,
   Metric,
   PatientDetails,
+  SymptomId,
+  SymptomRecord,
 } from "../src/shared/types.js";
 
 const typeMap: Record<string, Metric> = {
@@ -33,6 +35,49 @@ const typeMap: Record<string, Metric> = {
   HKQuantityTypeIdentifierDietaryProtein: "protein",
   HKQuantityTypeIdentifierDietaryFatTotal: "fat",
   HKClinicalTypeIdentifierMedicationRecord: "medication",
+};
+const symptomTypeMap: Record<string, SymptomId> = {
+  HKCategoryTypeIdentifierAbdominalCramps: "abdominalCramps",
+  HKCategoryTypeIdentifierAcne: "acne",
+  HKCategoryTypeIdentifierAppetiteChanges: "appetiteChanges",
+  HKCategoryTypeIdentifierBladderIncontinence: "bladderIncontinence",
+  HKCategoryTypeIdentifierBloating: "bloating",
+  HKCategoryTypeIdentifierBreastPain: "breastPain",
+  HKCategoryTypeIdentifierChestTightnessOrPain: "chestTightnessOrPain",
+  HKCategoryTypeIdentifierChills: "chills",
+  HKCategoryTypeIdentifierConstipation: "constipation",
+  HKCategoryTypeIdentifierCoughing: "coughing",
+  HKCategoryTypeIdentifierDiarrhea: "diarrhea",
+  HKCategoryTypeIdentifierDizziness: "dizziness",
+  HKCategoryTypeIdentifierDrySkin: "drySkin",
+  HKCategoryTypeIdentifierFainting: "fainting",
+  HKCategoryTypeIdentifierFatigue: "fatigue",
+  HKCategoryTypeIdentifierFever: "fever",
+  HKCategoryTypeIdentifierGeneralizedBodyAche: "generalizedBodyAche",
+  HKCategoryTypeIdentifierHeadache: "headache",
+  HKCategoryTypeIdentifierHeartburn: "heartburn",
+  HKCategoryTypeIdentifierHotFlashes: "hotFlashes",
+  HKCategoryTypeIdentifierHairLoss: "hairLoss",
+  HKCategoryTypeIdentifierLossOfSmell: "lossOfSmell",
+  HKCategoryTypeIdentifierLossOfTaste: "lossOfTaste",
+  HKCategoryTypeIdentifierLowerBackPain: "lowerBackPain",
+  HKCategoryTypeIdentifierMemoryLapse: "memoryLapse",
+  HKCategoryTypeIdentifierMenstrualCramps: "menstrualCramps",
+  HKCategoryTypeIdentifierMoodChanges: "moodChanges",
+  HKCategoryTypeIdentifierNausea: "nausea",
+  HKCategoryTypeIdentifierNightSweats: "nightSweats",
+  HKCategoryTypeIdentifierPelvicPain: "pelvicPain",
+  HKCategoryTypeIdentifierRapidPoundingOrFlutteringHeartbeat:
+    "rapidPoundingOrFlutteringHeartbeat",
+  HKCategoryTypeIdentifierRunnyNose: "runnyNose",
+  HKCategoryTypeIdentifierShortnessOfBreath: "shortnessOfBreath",
+  HKCategoryTypeIdentifierSinusCongestion: "sinusCongestion",
+  HKCategoryTypeIdentifierSkippedHeartbeat: "skippedHeartbeat",
+  HKCategoryTypeIdentifierSoreThroat: "soreThroat",
+  HKCategoryTypeIdentifierSleepChanges: "sleepChanges",
+  HKCategoryTypeIdentifierVaginalDryness: "vaginalDryness",
+  HKCategoryTypeIdentifierVomiting: "vomiting",
+  HKCategoryTypeIdentifierWheezing: "wheezing",
 };
 
 const plausibleRanges: Partial<
@@ -171,12 +216,36 @@ export async function parseAppleHealthExport(
   }).parse(xml);
   const rows = parsed?.HealthData?.Record ?? [];
   const records: HealthRecord[] = [];
+  const symptoms: SymptomRecord[] = [];
   const seen = new Set<string>();
+  const seenSymptoms = new Set<string>();
   let unsupported = 0;
   let implausible = 0;
   for (const raw of Array.isArray(rows) ? rows : [rows]) {
     const r = attribute(raw);
     const metric = typeMap[r.type];
+    const symptom = symptomTypeMap[r.type];
+    if (symptom) {
+      const startTimestamp = Date.parse(r.startDate);
+      const endTimestamp = Date.parse(r.endDate || r.startDate);
+      if (!r.startDate || !Number.isFinite(startTimestamp)) continue;
+      const start = new Date(startTimestamp).toISOString();
+      const end = Number.isFinite(endTimestamp)
+        ? new Date(endTimestamp).toISOString()
+        : start;
+      const value = r.value || "";
+      const key = `${symptom}|${start}|${end}|${value}|${r.sourceName || ""}`;
+      if (seenSymptoms.has(key)) continue;
+      seenSymptoms.add(key);
+      symptoms.push({
+        symptom,
+        start,
+        end,
+        value,
+        source: r.sourceName,
+      });
+      continue;
+    }
     if (!metric) {
       unsupported++;
       continue;
@@ -206,7 +275,11 @@ export async function parseAppleHealthExport(
     });
   }
   records.sort((a, b) => a.date.localeCompare(b.date));
-  const dates = records.map((r) => r.date);
+  symptoms.sort((a, b) => a.start.localeCompare(b.start));
+  const dates = [
+    ...records.map((r) => r.date),
+    ...symptoms.map((symptom) => symptom.start),
+  ].sort();
   let patient: PatientDetails | undefined;
   let clinicalDataWarning: string | undefined;
   if (clinicalFile) {
@@ -218,10 +291,11 @@ export async function parseAppleHealthExport(
   }
   return {
     records,
+    symptoms,
     patient,
     diagnostics: {
       fileName,
-      imported: records.length,
+      imported: records.length + symptoms.length,
       unsupported,
       implausible,
       earliest: dates[0],

@@ -21,6 +21,8 @@ records, patient details, or generated reports to a server.
 - Last-30-days overview cards for weight, heart rate, steps, and sleep.
 - Collapsible last-year and all-time overview cards.
 - Trend charts for vitals, sleep, activity, and mobility.
+- Imported symptom events with duration-aware timelines and descriptive same-day
+  comparisons against numeric health data.
 - Daily min–max range charts with average ticks for blood pressure, heart rate, and
   core walking metrics, plus overall-average guides.
 - Detailed daily tables with min/max, average, standard deviation, and intra-day traces.
@@ -227,6 +229,7 @@ Apple Health record types are mapped into these report groups:
 | Group | Metrics |
 |---|---|
 | Vitals | Weight, heart rate, resting heart rate, systolic pressure, diastolic pressure, body temperature |
+| Symptoms | Apple Health symptom events with presence/severity value, start time, end time, duration, and source |
 | Sleep and activity | Sleep, steps, active energy, exercise time, walking/running distance |
 | Mobility | Walking speed, step length, walking asymmetry, double-support percentage, stair ascent speed, stair descent speed, six-minute walk distance |
 | Clinical | Medication records when a supported record is present |
@@ -237,7 +240,8 @@ skipped. Exact duplicate supported measurements are removed.
 
 Sleep values are derived from each record's start/end duration. Imported data remains a
 read-only representation of the Apple Health export; AHDReport does not provide manual
-measurement or medication entry.
+measurement, symptom, or medication entry. Symptom comparisons are descriptive and do
+not establish causation or diagnosis.
 
 ## Troubleshooting
 

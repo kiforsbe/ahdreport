@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { HealthData, Metric } from "../../shared/types";
+import type { HealthData, Metric, SymptomId, SymptomRecord } from "../../shared/types";
 import {
   colorsByMetric,
   dailyStats,
@@ -22,6 +22,7 @@ import {
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { bpRangeBarShape } from "./bpChartShapes";
+import { SymptomOverlay } from "../SymptomOverlay";
 
 function RangeMetricTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -51,9 +52,15 @@ function RangeMetricTooltip({ active, payload, label }: any) {
 export const RangeMetricChart = memo(function RangeMetricChart({
   metric,
   records,
+  symptoms = [],
+  selectedSymptom,
+  showSymptomOverlay = false,
 }: {
   metric: Metric;
   records: HealthData["records"];
+  symptoms?: SymptomRecord[];
+  selectedSymptom?: SymptomId;
+  showSymptomOverlay?: boolean;
 }) {
   const printLayout = useContext(PrintLayoutContext);
   const color = colorsByMetric[metric];
@@ -121,21 +128,35 @@ export const RangeMetricChart = memo(function RangeMetricChart({
   );
   if (printLayout)
     return (
-      <div data-pdf-chart-ready="true">
-        {chart(680, 260)}
+      <div className="chart-with-symptom-overlay">
+        <div data-pdf-chart-ready="true">{chart(680, 260)}</div>
+        <SymptomOverlay
+          symptoms={symptoms}
+          from={rows[0].date}
+          to={rows.at(-1)!.date}
+          selectedSymptom={selectedSymptom}
+          visible={showSymptomOverlay}
+        />
         <small style={{ color }}>
           ▮ Daily range (avg tick) · ┄ Overall average {format(overallAverage, rows[0].unit)}
         </small>
       </div>
     );
   return (
-    <>
+    <div className="chart-with-symptom-overlay">
       <ResponsiveContainer key={`${metric}-screen`} width="100%" height={210}>
         {chart()}
       </ResponsiveContainer>
+      <SymptomOverlay
+        symptoms={symptoms}
+        from={rows[0].date}
+        to={rows.at(-1)!.date}
+        selectedSymptom={selectedSymptom}
+        visible={showSymptomOverlay}
+      />
       <small style={{ color }}>
         ▮ Daily range (avg tick) · ┄ Overall average {format(overallAverage, rows[0].unit)}
       </small>
-    </>
+    </div>
   );
 });

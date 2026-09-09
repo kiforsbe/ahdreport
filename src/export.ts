@@ -1,5 +1,5 @@
-import type { HealthData } from "./shared/types";
-import { labels } from "./report";
+import type { HealthData, SymptomRecord } from "./shared/types";
+import { labels, symptomEpisodes, symptomLabel } from "./report";
 
 function csvCell(value: string | number | undefined) {
   const text = String(value ?? "");
@@ -18,21 +18,60 @@ function csvCell(value: string | number | undefined) {
 export function exportRows(records: HealthData["records"]) {
   return records.slice().reverse();
 }
-export function createCsv(records: HealthData["records"]) {
+export function createCsv(
+  records: HealthData["records"],
+  symptoms: SymptomRecord[] = [],
+) {
   const rows = [
-    ["Date", "Metric", "Value", "Unit", "Source", "Category"]
+    [
+      "Record type",
+      "Date",
+      "Metric",
+      "Value",
+      "Unit",
+      "Source",
+      "Category",
+      "Symptom",
+      "Start",
+      "End",
+      "Duration (h)",
+    ]
       .map(csvCell)
       .join(","),
   ];
   exportRows(records).forEach((record) =>
     rows.push(
       [
+        "measurement",
         record.date,
         labels[record.metric],
         record.value,
         record.unit,
         record.source,
         record.category,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ]
+        .map(csvCell)
+        .join(","),
+    ),
+  );
+  symptomEpisodes(symptoms).forEach((symptom) =>
+    rows.push(
+      [
+        "symptom",
+        symptom.start,
+        undefined,
+        undefined,
+        undefined,
+        symptom.source,
+        symptom.value,
+        symptomLabel(symptom.symptom),
+        symptom.start,
+        symptom.end,
+        symptom.durationHours.toFixed(1),
       ]
         .map(csvCell)
         .join(","),
@@ -48,7 +87,10 @@ function xmlCell(value: string | number | undefined) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
 }
-export async function createExcel(records: HealthData["records"]) {
+export async function createExcel(
+  records: HealthData["records"],
+  symptoms: SymptomRecord[] = [],
+) {
   const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const textCell = (value: string | number | undefined) =>
@@ -63,7 +105,7 @@ export async function createExcel(records: HealthData["records"]) {
   ];
   zip.file(
     "[Content_Types].xml",
-    '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+    '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
   );
   zip.file(
     "_rels/.rels",
@@ -71,15 +113,34 @@ export async function createExcel(records: HealthData["records"]) {
   );
   zip.file(
     "xl/workbook.xml",
-    '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Health data" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Health data" sheetId="1" r:id="rId1"/><sheet name="Symptoms" sheetId="2" r:id="rId2"/></sheets></workbook>',
   );
   zip.file(
     "xl/_rels/workbook.xml.rels",
-    '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+    '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>',
   );
   zip.file(
     "xl/worksheets/sheet1.xml",
     `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows.join("")}</sheetData></worksheet>`,
+  );
+  const symptomHeaders = [
+    "Start",
+    "End",
+    "Symptom",
+    "Duration (h)",
+    "Value",
+    "Source",
+  ];
+  const symptomRows = [
+    `<row r="1">${symptomHeaders.map(textCell).join("")}</row>`,
+    ...symptomEpisodes(symptoms).map(
+      (symptom, index) =>
+        `<row r="${index + 2}">${textCell(symptom.start)}${textCell(symptom.end)}${textCell(symptomLabel(symptom.symptom))}${textCell(symptom.durationHours.toFixed(1))}${textCell(symptom.value)}${textCell(symptom.source)}</row>`,
+    ),
+  ];
+  zip.file(
+    "xl/worksheets/sheet2.xml",
+    `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${symptomRows.join("")}</sheetData></worksheet>`,
   );
   return zip.generateAsync({ type: "base64", compression: "DEFLATE" });
 }
