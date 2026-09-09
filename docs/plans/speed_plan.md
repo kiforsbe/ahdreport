@@ -1,7 +1,8 @@
 # Detailed performance implementation plan
 
 Status: Draft for implementation  
-Related proposal: `proposal.md`
+Related proposal: none currently checked into the repository — this document is
+self-contained and does not depend on an external proposal file.
 
 ## 1. Objective
 
@@ -30,18 +31,27 @@ after `recordTarget`; that behavior should be retained.
 
 ### Filtering and aggregation
 
-Parser records are globally sorted in ascending ISO timestamp order. Filtering uses
-lexical ISO comparisons, but scans the full array. App state produces selected, 30-day,
-365-day, and all-time arrays. A `WeakMap` caches daily derivations for each array, but a
-date change creates a new array and cache, and each aggregate type still builds its own
-per-metric result.
+Parser records are globally sorted in ascending ISO timestamp order. Filtering
+(`filtered()` in `src/report.ts`) parses the `from`/`to` boundaries as local-time day
+starts/ends and compares numeric epoch milliseconds against each record's UTC ISO
+timestamp, but still scans the full array linearly. Because record dates are UTC and the
+UI boundaries are local-time, any binary-search replacement must convert boundaries to
+their equivalent UTC instant before comparing, not merely zero-pad them into ISO strings
+for lexical comparison. App state produces selected, 30-day, 365-day, and all-time
+arrays. There is currently no memoization of daily/aggregate derivations: `daily()`,
+`dailyTotals()`, and `dailyStats()` recompute from scratch on every render, and each
+aggregate type still builds its own per-metric result by re-filtering the array.
 
 ### Rendering
 
 The dashboard and detailed report share one React tree. Detailed tables are always
 mounted in viewer mode and may contain hundreds of rows per section. Many cells contain
-custom SVG visualizations. Recharts receives every selected day, including multi-year
-ranges. Closed overview `<details>` elements still have their card values calculated.
+custom SVG visualizations. Recharts receives every selected day already aggregated to one
+point per calendar day (so a 20-year all-time range is on the order of ~7,300 points, not
+per-record counts), including multi-year ranges. The 30-day overview section is not
+collapsible and always renders; only the 365-day and all-time overview sections are
+wrapped in closed `<details>` elements, and those closed elements still have their card
+values calculated.
 
 PDF preparation deliberately switches to a fixed-width chart tree and waits for chart
 readiness. Any lazy-mounting or containment work must preserve this synchronization.
@@ -106,10 +116,11 @@ the development console or benchmark runner rather than changing the normal UI.
 ### 3.3 Baseline record
 
 Record the machine, operating system, Node version, Electron version, build mode, input
-shape, and five-run median. Keep raw timing observations in the ignored temporary-plan
-directory or another explicitly local location. Do not impose tight CI performance
-thresholds on shared runners; use correctness tests in CI and broad regression checks
-where timing stability is sufficient.
+shape, and five-run median. Keep raw timing observations in a gitignored local directory
+(confirm or create a path such as `docs/plans/.local/` against this repo's `.gitignore`
+before use) rather than committing them. Do not impose tight CI performance thresholds on
+shared runners; use correctness tests in CI and broad regression checks where timing
+stability is sufficient.
 
 ### 3.4 Initial acceptance gate
 
@@ -119,7 +130,11 @@ Before optimization begins:
 - a production build succeeds;
 - the four fixture sizes can be generated deterministically;
 - medium and large baselines are recorded;
-- import and render phases can be distinguished rather than measured as one total.
+- import and render phases can be distinguished rather than measured as one total;
+- a DOM test environment (jsdom or happy-dom) and a component-rendering library (e.g.
+  React Testing Library) are added to the vitest configuration; no rendering test
+  infrastructure exists in the repo today, and several later milestones' acceptance
+  criteria (detailed-report mount state, memoized-render checks) depend on it.
 
 ## 4. Milestone 1: low-risk hot-path improvements
 
@@ -187,6 +202,12 @@ function recordRange(
 Initially, keep `filtered()` compatible by returning `records.slice(start, end)`. Later
 report-model code may consume the bounds directly to avoid copying all-time ranges.
 
+Because `record.date` values are UTC ISO timestamps while the current `from`/`to`
+boundaries are interpreted as local-time day starts/ends, boundary strings passed into
+`recordRange` must first be converted to their equivalent UTC ISO instant — matching
+today's `Date.parse` behavior — before any comparison against `record.date`. Do not
+compare local-time boundary strings directly against UTC record timestamps.
+
 Correctness cases:
 
 - empty records;
@@ -197,7 +218,10 @@ Correctness cases:
 - range outside the dataset;
 - daylight-saving transition days;
 - invalid UI dates handled consistently with current behavior;
-- duplicate timestamps.
+- duplicate timestamps;
+- local-time to UTC boundary conversion, verified in at least two non-UTC timezones (or
+  an explicit note that CI runs a fixed timezone and cross-timezone behavior is out of
+  scope for this gate).
 
 Acceptance:
 
@@ -206,7 +230,11 @@ Acceptance:
 - one million records and four representative ranges complete within 10 ms on the
   baseline development machine, excluding array allocation where bounds are consumed
   directly;
-- record ordering is unchanged.
+- record ordering is unchanged;
+- this win is strictly the O(log n) replacement for `filtered()`'s whole-array scan;
+  per-metric aggregate cost inside the resulting slice remains O(slice size) per metric
+  until Milestone 3's per-metric index lands, so this criterion measures boundary-lookup
+  latency, not end-to-end filter-to-render latency.
 
 ### 4.4 Avoid needless descending export sorts
 
@@ -224,10 +252,13 @@ Acceptance:
 
 ### 5.1 Lazy collapsed overview cards
 
-Create a small controlled disclosure component that tracks whether it has been opened.
-Do not calculate the 365-day and all-time card summaries until their respective
-disclosures are open. Decide whether values remain mounted after the first opening; the
-default should retain them to make repeated toggling instant.
+The 30-day overview section is not collapsible today and remains an always-open,
+always-calculated section; this milestone does not change it. Create a small controlled
+disclosure component that tracks whether it has been opened, and apply it to the
+existing 365-day and all-time `<details>` sections. Do not calculate the 365-day and
+all-time card summaries until their respective disclosures are open. Decide whether
+values remain mounted after the first opening; the default should retain them to make
+repeated toggling instant.
 
 When print layout requires these cards, explicitly define whether closed summaries are
 part of the PDF. Preserve current output unless a separate product decision changes it.
@@ -383,7 +414,9 @@ Migrate consumers incrementally:
 6. CSV/XLSX record selection.
 
 Keep compatibility wrappers around current report helpers until all consumers and tests
-have moved. Remove the `WeakMap` cache only after profiling confirms it is redundant.
+have moved. There is no existing cache to remove — frame this milestone's win as
+replacing several independent O(records) passes per render with one O(records) pass per
+session import.
 
 ### 6.5 Correctness gate
 
@@ -396,7 +429,10 @@ For generated datasets, compare old and new implementations for:
 - minimum, maximum, average, and population standard deviation;
 - day-trace reading order;
 - earliest and latest availability;
-- empty and single-reading days.
+- empty and single-reading days;
+- `HealthIndex.records` preserves the global ascending order already established by the
+  parser's sort — this invariant is inherited, not re-derived, and only needs to be
+  tested at the index-construction boundary.
 
 All comparisons should include multiple sources, equal timestamps, duplicates that have
 already passed parser deduplication, and metrics using different aggregation semantics.
@@ -471,6 +507,11 @@ Avoid including record content in logs or progress messages.
 - Convert worker failures into the existing user-facing error behavior.
 - Ensure canceling the file dialog creates no worker.
 
+There is no runtime fallback to synchronous main-thread parsing once this milestone
+lands; the worker-failure handling above covers a single import failing gracefully, not
+a mechanism to disable the worker path for all users. Rollback for this milestone means
+reverting the associated commit or release.
+
 ### 8.3 UI progress
 
 Expose coarse progress through the narrow preload bridge only if it materially improves
@@ -484,7 +525,11 @@ updates.
 - application window movement, cancellation, and error display remain functional;
 - worker output is equivalent to the current parser for the complete fixture suite;
 - no health content is written to temporary files or logs;
-- packaged and development builds can locate the worker script.
+- the worker script resolves correctly both in the `electron .` dev loop and from the
+  `tsc`-emitted `dist-electron` output, which are the only two build targets this repo
+  has today; no packaging tool (electron-builder, electron-forge, etc.) is currently
+  configured, so "packaged build" verification only applies if one is introduced before
+  this milestone ships.
 
 ## 9. Milestone 6: streaming XML and ZIP import
 
@@ -560,6 +605,11 @@ is tested.
 Keep the existing parser as a development fallback while comparing outputs. Add a
 temporary opt-in switch that is not exposed as a permanent user feature. Remove the old
 path and the switch after equivalence, performance, ZIP, and packaging gates pass.
+
+Once the fallback switch and old parser path are removed, rollback for this milestone
+means reverting the associated commit or release rather than toggling a runtime flag.
+This is acceptable given the equivalence gates in §9.7, but should be understood up
+front so reviewers don't expect a surviving runtime fallback.
 
 ### 9.7 Acceptance
 
@@ -699,7 +749,7 @@ to isolate.
 | Daily-statistic drift | Equivalence tests, stable ordering, and population-standard-deviation checks |
 | Lazy content missing from PDF | Make print layout an explicit mount condition and extend readiness verification |
 | Downsampling hides important extrema | Use extrema-preserving algorithms and keep tables/exports exact |
-| Worker packaging failure | Test both development and production Electron paths |
+| Worker packaging failure | Verify worker resolution in the `electron .` dev loop and in `tsc`-emitted `dist-electron` output; add packaging-tool verification only if/when a packager is introduced |
 | ZIP bomb or malformed XML | Expanded-byte, element, record, and compression-ratio limits |
 | Streaming parser behavior differs | Temporary fallback and fixture-by-fixture output comparison |
 | IPC optimization adds excessive complexity | Make compact transfer conditional on measured bottlenecks |
