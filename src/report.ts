@@ -690,7 +690,13 @@ export function plateauSegments(
   const result: Row[] = [];
   for (const realRun of realRuns) {
     const run = denseDaily(realRun);
-    if (run.length < 14) continue;
+    // A run needs at least one full bucket's worth of calendar days to
+    // count as a plateau at all — bucketSize is already the minimum
+    // plateau length, so gating on a separate hardcoded minimum here would
+    // silently drop short-but-real clusters (e.g. a week of readings
+    // sandwiched between two data gaps) that are long enough to say
+    // something meaningful about.
+    if (run.length < bucketSize) continue;
     const runValues = run.map((r) => r.value);
     const buckets: { values: number[]; startIndex: number; endIndex: number }[] =
       [];

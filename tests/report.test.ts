@@ -244,8 +244,8 @@ describe("plateaus", () => {
     expect(result.slice(0, 7).every((r) => r.value === 70)).toBe(true);
     expect(result.slice(7).every((r) => r.value === 90)).toBe(true);
   });
-  it("returns no segments below the 14-day-with-data minimum", () => {
-    expect(plateaus(twoRegimeRows.slice(0, 13), "weight")).toEqual([]);
+  it("returns no segments for a run shorter than one bucket (the minimum plateau length)", () => {
+    expect(plateaus(twoRegimeRows.slice(0, 6), "weight")).toEqual([]);
   });
 });
 
@@ -256,8 +256,8 @@ describe("plateauCallouts", () => {
     expect(result[0]).toMatchObject({ date: "2026-01-04", value: 70 });
     expect(result[1]).toMatchObject({ date: "2026-01-11", value: 90 });
   });
-  it("returns no callouts below the 14-day-with-data minimum", () => {
-    expect(plateauCallouts(twoRegimeRows.slice(0, 13), "weight")).toEqual([]);
+  it("returns no callouts for a run shorter than one bucket (the minimum plateau length)", () => {
+    expect(plateauCallouts(twoRegimeRows.slice(0, 6), "weight")).toEqual([]);
   });
 });
 
@@ -284,8 +284,18 @@ describe("plateauSegments / calloutsFromPlateauRows (raw rows)", () => {
     expect(callouts[0]).toMatchObject({ date: "2026-01-04", value: 40 });
     expect(callouts[1]).toMatchObject({ date: "2026-01-11", value: 55 });
   });
-  it("returns no segments below the 14-day minimum", () => {
-    expect(plateauSegments(twoRegimeDailyRows.slice(0, 13))).toEqual([]);
+  it("returns no segments for a run shorter than one bucket (the minimum plateau length)", () => {
+    // 6 consecutive days: bucket size for this short a span is the 7-day
+    // floor, so a 6-day run falls one day short of a full bucket.
+    expect(plateauSegments(twoRegimeDailyRows.slice(0, 6))).toEqual([]);
+  });
+  it("returns a segment once a run reaches exactly one bucket's worth of days", () => {
+    // A run doesn't need a second bucket to merge against to count as a
+    // plateau — one full bucket (7 days here) is already the minimum
+    // meaningful plateau length.
+    const segments = plateauSegments(twoRegimeDailyRows.slice(0, 7));
+    expect(segments).toHaveLength(7);
+    expect(segments.every((s) => s.value === 40)).toBe(true);
   });
 });
 
