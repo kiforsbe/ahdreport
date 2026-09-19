@@ -52,6 +52,15 @@ describe("createCsv", () => {
     expect(csv).toContain("Headache");
     expect(csv).toContain("4.0");
   });
+
+  it("exports glucose and insulin rows with their normalized unit and context category", () => {
+    const csv = createCsv([
+      { metric: "bloodGlucose", date: "2026-01-01T08:00:00.000Z", value: 6.2, unit: "mmol/L", category: "beforeMeal" },
+      { metric: "insulinDelivery", date: "2026-01-01T08:05:00.000Z", value: 6, unit: "IU", category: "bolus" },
+    ]);
+    expect(csv).toContain("Blood glucose,6.2,mmol/L,,beforeMeal");
+    expect(csv).toContain("Insulin delivery,6,IU,,bolus");
+  });
 });
 
 describe("createExcel", () => {

@@ -78,10 +78,17 @@ both native dialogs.
 | Renderer entry | `src/main.tsx` | React root and stylesheet loading |
 | Renderer | `src/App.tsx` | Session state, patient editor, overview cards, charts, detailed tables, CSV/XLSX serialization, and print-layout readiness protocol |
 | Renderer model | `src/report.ts` | Pure filtering, formatting, daily aggregation, medians, deltas, and metric metadata |
+| Renderer model | `src/glucose.ts` | Pure glucose calculations: target ranges, summary with continuous-data gate, daily rows, hourly profile, activity sessions, sleep nights, descriptive associations |
+| Renderer | `src/components/glucose/*` | Blood glucose dashboard section: overview, summary card, range control, context timeline, daily/typical-day charts, association panel |
+| Renderer | `src/components/tables/GlucoseReportTable.tsx` | Detailed glucose table with target band, range split, and clock-time trace |
 | Styling | `src/styles.css` | Application, responsive, card, chart, and print presentation |
 | Styling | `src/table-overrides.css` | Detailed-report table width overrides |
+| Styling | `src/glucose.css` | Blood glucose dashboard and table presentation |
 | Tests | `tests/appleHealthParser.test.ts` | Apple XML, ZIP, CDA, duplicate, sleep, and invalid-file behavior |
 | Tests | `tests/report.test.ts` | Date filtering, daily statistics, medians, latest values, and deltas |
+| Tests | `tests/glucose.test.ts` | Target ranges, summary gating, daily rows, hourly profile, and associations |
+| Tests | `tests/glucoseOverview.test.tsx` | Blood glucose dashboard section rendering and range control interaction |
+| Tests | `tests/glucoseReportTable.test.tsx` | Detailed glucose table rendering, target band, and range split |
 
 `src/shared/types.ts` is the boundary contract. The Electron build and renderer build
 compile it independently; runtime values crossing IPC are plain serializable objects.
@@ -139,7 +146,12 @@ classDiagram
 
 `Metric` is a closed TypeScript string union. Supported values cover weight, heart
 rate and resting heart rate, systolic and diastolic pressure, temperature, sleep,
-activity, walking/mobility measurements, and medication records.
+activity, walking/mobility measurements, and medication records. Also supported are
+blood glucose, insulin delivery, body composition (BMI, body fat, waist circumference,
+lean body mass), SpO₂, respiratory rate, heart rate variability, VO₂ max, and walking
+heart rate average. On `HealthRecord`, `category` also carries the glucose meal-time tag
+(before/after meal) and the insulin basal/bolus context, in addition to its existing use
+for symptom category values.
 
 Optional properties are shown without optionality markers in the diagram. In the
 source, `HealthData.patient`, the individual patient fields, `source`, `category`,
@@ -197,6 +209,17 @@ can be displayed without converting the event into a numeric metric. Exact dupli
 are removed using metric or symptom id, normalized timestamps, value, unit, and source
 name. The parser returns imported count, unsupported count, earliest/latest timestamps,
 and warnings such as missing medication data or unreadable clinical data.
+
+A handful of metrics are unit-normalized before the plausibility check runs. Blood
+glucose is converted to mmol/L: `mg/dL` values are divided by 18.0156, and Apple's
+`mmol<...>/L` unit (which embeds the molar mass) is rewritten to the plain `mmol/L`
+unit without changing the value. SpO₂ and body fat percentage are stored by Apple as
+fractions with unit `%` (e.g. `0.97`), so values at or below 1 are multiplied by 100.
+`MetadataEntry` child nodes are read only for two metrics, so every other record skips
+that extra parsing work: blood glucose reads `HKBloodGlucoseMealTime` into a
+before/after-meal `category`, and insulin delivery reads `HKInsulinDeliveryReason`
+into a basal/bolus `category`. Plausibility bounds (`isPlausible`) are checked against
+the already-normalized value and unit, not the raw HealthKit value.
 
 ### 5.2 CDA patient extraction
 
@@ -261,6 +284,9 @@ list containing name, personnummer, date of birth, and sex.
 - `notice` contains import/export feedback.
 - `printLayout` selects the dedicated PDF-safe chart tree.
 - `selectedSymptom` and `showSymptomOverlay` control local symptom chart context.
+- `glucoseRange` holds the selected blood glucose target range. It is session-only,
+  defaults to the Type 2 preset (3.9–10.0 mmol/L), and is reset to that default on
+  every new import.
 - `patientProfile` is a ref so editing demographics does not rerender the report.
 
 ```mermaid
@@ -276,6 +302,8 @@ flowchart LR
     SelectedSymptoms --> ChartOverlays["optional chart overlays"]
     Daily --> Charts
     Daily --> DetailTables["Detailed daily tables"]
+    Selected --> GlucoseSection["Blood glucose section (target range)"]
+    GlucoseSection --> GlucoseTable["GlucoseReportTable"]
     Last30 --> Cards30["Visible overview cards"]
     Last365 --> Cards365["Collapsed overview cards"]
     AllTime --> CardsAll["Collapsed overview cards"]
@@ -307,12 +335,24 @@ selected numeric metrics. A selected symptom can optionally add translucent dura
 bands and dashed onset markers to numeric charts. All comparison copy is descriptive and
 explicitly avoids causal or diagnostic claims.
 
+The Blood glucose section is rendered directly after the symptoms section, gated on
+`hasGlucose` (whether any imported record has `metric === "bloodGlucose"`). It contains
+a summary card (time-in-range split against the selected target range), a context
+timeline of readings with their meal/insulin tags, descriptive associations, and a
+typical-day/meal-context view. The typical-day hourly profile and its associated charts
+are only shown once the continuous-data gate is met — at least 14 days of data with at
+least 70% coverage — otherwise the section falls back to sparser summary-only content.
+The section's charts are custom SVG (not Recharts) and are not part of the
+`data-pdf-chart-ready` print-readiness protocol described in §9.2.
+
 The detailed section is part of the same React document and is available in both viewer
 and PDF modes. In the viewer it is lazily mounted behind a "Show detailed measurements"
 disclosure and is force-mounted during print preparation. It contains specialized tables:
 
 - `VitalsReportTable` combines pressure, heart rate, and weight.
 - `SymptomsReportTable` lists imported symptom episodes with duration and same-day context.
+- `GlucoseReportTable` lists daily glucose readings against the target band, with range
+  split, insulin delivery, and a clock-time trace.
 - `ActivityReportTable` shows per-day totals as in-cell bars.
 - `WalkingReportTable` combines mobility metrics.
 - `ReportTable` handles remaining supported metrics.
@@ -320,7 +360,7 @@ disclosure and is force-mounted during print preparation. It contains specialize
 `DailyDistribution` is a custom SVG showing daily min/max, average, standard deviation,
 and shared column bounds. `DayTrace` shows intra-day shape. Distribution bounds also use
 Tukey fences to prevent a rare bad reading from flattening every other row. Viewer
-tables are limited to the 365 most recent days; PDF tables use the 90 most recent days
+tables are limited to the 365 most recent days; PDF tables use the 365 most recent days
 to reduce PDF size. Each report section emits explicit truncation or coverage notes when
 the selected period and available data differ.
 
@@ -449,6 +489,6 @@ hardening for very large or adversarial inputs.
 - Medication is reported only when supported records exist; there is no manual
   medication entry workflow.
 - Detailed viewer tables are capped at 365 days per section; PDF tables are capped at
-  90 days per section to bound report size.
+  365 days per section to bound report size.
 - The renderer is intentionally concentrated in `App.tsx`; splitting it into feature
   modules may become useful as the UI and automated component-test surface grow.

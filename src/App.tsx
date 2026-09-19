@@ -36,6 +36,9 @@ import { ActivityReportTable } from "./components/tables/ActivityReportTable";
 import { NutritionReportTable } from "./components/tables/NutritionReportTable";
 import { SymptomOverview } from "./components/SymptomOverview";
 import { SymptomsReportTable } from "./components/tables/SymptomsReportTable";
+import { GlucoseOverview } from "./components/glucose/GlucoseOverview";
+import { GlucoseReportTable } from "./components/tables/GlucoseReportTable";
+import { type GlucoseRange, defaultGlucoseRange } from "./glucose";
 
 function rangeDate(days: number, end: string) {
   const d = end ? new Date(`${end}T12:00:00`) : new Date();
@@ -56,6 +59,11 @@ export function App() {
   const [notice, setNotice] = useState("");
   const [selectedSymptom, setSelectedSymptom] = useState<SymptomId>();
   const [showSymptomOverlay, setShowSymptomOverlay] = useState(false);
+  const [glucoseRange, setGlucoseRange] = useState<GlucoseRange>(defaultGlucoseRange);
+  const hasGlucose = useMemo(
+    () => !!data?.records.some((record) => record.metric === "bloodGlucose"),
+    [data],
+  );
   const records = useMemo(
     () => (data ? filtered(data.records, from, to) : []),
     [data, from, to],
@@ -180,6 +188,7 @@ export function App() {
       const result = await window.healthAPI.importExport();
       if (result) {
         setData(result);
+        setGlucoseRange(defaultGlucoseRange);
         setFrom(result.diagnostics.earliest?.slice(0, 10) ?? "");
         setTo(result.diagnostics.latest?.slice(0, 10) ?? "");
         patientProfile.current = {
@@ -335,16 +344,22 @@ export function App() {
           }}
         />
       </section>
-      <OverviewCards records={overviewRecords} periodLabel="Last 30 days" />
+      <OverviewCards
+        records={overviewRecords}
+        periodLabel="Last 30 days"
+        glucose={hasGlucose ? { range: glucoseRange, from: rangeDate(30, to), to } : undefined}
+      />
       <OverviewCards
         records={yearOverviewRecords}
         periodLabel="Last year"
         collapsible
+        glucose={hasGlucose ? { range: glucoseRange, from: rangeDate(365, to), to } : undefined}
       />
       <OverviewCards
         records={allTimeOverviewRecords}
         periodLabel="All time"
         collapsible
+        glucose={hasGlucose ? { range: glucoseRange, from: "", to } : undefined}
       />
       <SymptomOverview
         symptoms={symptoms}
@@ -355,6 +370,14 @@ export function App() {
         onSelectedSymptomChange={setSelectedSymptom}
         showOverlay={showSymptomOverlay}
         onShowOverlayChange={setShowSymptomOverlay}
+      />
+      <GlucoseOverview
+        records={records}
+        from={from}
+        to={to}
+        range={glucoseRange}
+        onRangeChange={setGlucoseRange}
+        hasGlucose={hasGlucose}
       />
       <section className="dashboard">
         {metricGroups.map((group) => (
@@ -498,6 +521,13 @@ export function App() {
                 from={from}
                 to={to}
                 printLayout={printLayout}
+              />
+              <GlucoseReportTable
+                records={records}
+                from={from}
+                to={to}
+                metadata={metadata}
+                range={glucoseRange}
               />
               <VitalsReportTable records={records} from={from} to={to} metadata={metadata} />
               <ActivityReportTable records={records} from={from} to={to} metadata={metadata} />
