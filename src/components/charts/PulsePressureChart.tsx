@@ -1,6 +1,5 @@
 import { memo, useContext } from "react";
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -13,8 +12,10 @@ import type { HealthData } from "../../shared/types";
 import {
   bpDerived,
   calloutsFromPlateauRows,
+  denseDaily,
   format,
   formatDate,
+  interpolatedColor,
   outlierDates,
   plateauSegments,
 } from "../../report";
@@ -44,6 +45,9 @@ function PulsePressureTooltip({ active, payload, label }: any) {
         Pulse pressure: {format(row.pulsePressure, "mmHg")}
       </div>
       <div style={{ color: MAP_COLOR }}>MAP: {format(row.map, "mmHg")}</div>
+      {row.interpolated && (
+        <div style={{ color: interpolatedColor }}>Interpolated (no data logged)</div>
+      )}
     </div>
   );
 }
@@ -80,23 +84,48 @@ export const PulsePressureChart = memo(function PulsePressureChart({ records }: 
   const mapCallouts = new Map(
     calloutsFromPlateauRows(mapPlateau).map((row) => [row.date, row.value]),
   );
-  const chartRows = rows.map((row) => ({
-    ...row,
-    pulsePressurePlateau: pulsePressurePlateauByDate.get(row.date),
-    mapPlateau: mapPlateauByDate.get(row.date),
-  }));
+  const ppDense = denseDaily(
+    rows.map((r) => ({ date: r.date, value: r.pulsePressure, unit: "mmHg" })),
+  );
+  const mapDense = denseDaily(
+    rows.map((r) => ({ date: r.date, value: r.map, unit: "mmHg" })),
+  );
+  const mapDenseByDate = new Map(mapDense.map((row) => [row.date, row]));
+  const chartRows = ppDense.map((pp) => {
+    const mapRow = mapDenseByDate.get(pp.date);
+    return {
+      date: pp.date,
+      pulsePressure: pp.value,
+      map: mapRow?.value,
+      realPulsePressure: pp.interpolated ? undefined : pp.value,
+      realMap: mapRow && !mapRow.interpolated ? mapRow.value : undefined,
+      interpolated: pp.interpolated || Boolean(mapRow?.interpolated),
+      pulsePressurePlateau: pulsePressurePlateauByDate.get(pp.date),
+      mapPlateau: mapPlateauByDate.get(pp.date),
+    };
+  });
   const chart = (width?: number, height?: number) => (
     <ComposedChart data={chartRows} width={width} height={height}>
       <CartesianGrid vertical={false} stroke="#e7eaf0" />
       <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
       <YAxis domain={[axisMin, "auto"]} tick={{ fontSize: 11 }} width={45} />
       <Tooltip content={<PulsePressureTooltip />} />
-      <Area
+      <Line
         type="monotone"
         dataKey="pulsePressure"
+        stroke={interpolatedColor}
+        strokeWidth={2}
+        strokeDasharray="4 3"
+        strokeOpacity={0.6}
+        dot={false}
+        isAnimationActive={!printLayout}
+      />
+      <Line
+        type="monotone"
+        dataKey="realPulsePressure"
         stroke={PULSE_PRESSURE_COLOR}
         strokeWidth={2.5}
-        fill="none"
+        connectNulls={false}
         dot={outlierDot(ppOutliers, PULSE_PRESSURE_COLOR, {
           valueKey: "pulsePressure",
           unit: "mmHg",
@@ -104,12 +133,22 @@ export const PulsePressureChart = memo(function PulsePressureChart({ records }: 
         })}
         isAnimationActive={!printLayout}
       />
-      <Area
+      <Line
         type="monotone"
         dataKey="map"
+        stroke={interpolatedColor}
+        strokeWidth={2}
+        strokeDasharray="4 3"
+        strokeOpacity={0.6}
+        dot={false}
+        isAnimationActive={!printLayout}
+      />
+      <Line
+        type="monotone"
+        dataKey="realMap"
         stroke={MAP_COLOR}
         strokeWidth={2.5}
-        fill="none"
+        connectNulls={false}
         dot={outlierDot(mapOutliers, MAP_COLOR, {
           valueKey: "map",
           unit: "mmHg",

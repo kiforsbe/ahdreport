@@ -4,6 +4,8 @@ import {
   daily,
   dailyStats,
   decimalsByMetric,
+  denseDaily,
+  denseDateRange,
   filtered,
   format,
   formatDate,
@@ -58,6 +60,82 @@ describe("report model", () => {
       standardDeviation: 1,
       values: [70, 72],
     }));
+});
+
+describe("denseDaily", () => {
+  it("returns an empty array for empty input", () => {
+    expect(denseDaily([])).toEqual([]);
+  });
+  it("leaves a gapless series untouched, marking every row as real", () => {
+    const rows = [
+      { date: "2026-01-01", value: 10, unit: "kg" },
+      { date: "2026-01-02", value: 12, unit: "kg" },
+    ];
+    expect(denseDaily(rows)).toEqual([
+      { date: "2026-01-01", value: 10, unit: "kg", interpolated: false },
+      { date: "2026-01-02", value: 12, unit: "kg", interpolated: false },
+    ]);
+  });
+  it("linearly interpolates a single missing day between two real readings", () => {
+    const rows = [
+      { date: "2026-01-01", value: 10, unit: "kg" },
+      { date: "2026-01-03", value: 20, unit: "kg" },
+    ];
+    expect(denseDaily(rows)).toEqual([
+      { date: "2026-01-01", value: 10, unit: "kg", interpolated: false },
+      { date: "2026-01-02", value: 15, unit: "kg", interpolated: true },
+      { date: "2026-01-03", value: 20, unit: "kg", interpolated: false },
+    ]);
+  });
+  it("linearly interpolates across a multi-day gap in even steps", () => {
+    const rows = [
+      { date: "2026-01-01", value: 0, unit: "kg" },
+      { date: "2026-01-05", value: 8, unit: "kg" },
+    ];
+    expect(denseDaily(rows).map((r) => [r.date, r.value, r.interpolated])).toEqual([
+      ["2026-01-01", 0, false],
+      ["2026-01-02", 2, true],
+      ["2026-01-03", 4, true],
+      ["2026-01-04", 6, true],
+      ["2026-01-05", 8, false],
+    ]);
+  });
+  it("never extrapolates before the first or after the last real day", () => {
+    const rows = [{ date: "2026-01-01", value: 10, unit: "kg" }];
+    expect(denseDaily(rows)).toEqual([
+      { date: "2026-01-01", value: 10, unit: "kg", interpolated: false },
+    ]);
+  });
+});
+
+describe("denseDateRange", () => {
+  it("returns an empty array for empty input", () => {
+    expect(denseDateRange([])).toEqual([]);
+  });
+  it("leaves a gapless series of dates untouched", () => {
+    expect(denseDateRange(["2026-01-01", "2026-01-02"])).toEqual([
+      "2026-01-01",
+      "2026-01-02",
+    ]);
+  });
+  it("fills in every missing calendar day between the first and last date", () => {
+    expect(denseDateRange(["2026-01-05", "2026-01-01"])).toEqual([
+      "2026-01-01",
+      "2026-01-02",
+      "2026-01-03",
+      "2026-01-04",
+      "2026-01-05",
+    ]);
+  });
+  it("de-duplicates repeated dates", () => {
+    expect(denseDateRange(["2026-01-01", "2026-01-01", "2026-01-02"])).toEqual([
+      "2026-01-01",
+      "2026-01-02",
+    ]);
+  });
+  it("never extrapolates beyond a single given date", () => {
+    expect(denseDateRange(["2026-01-01"])).toEqual(["2026-01-01"]);
+  });
 });
 
 describe("overview statistics", () => {

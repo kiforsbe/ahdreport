@@ -444,6 +444,74 @@ export function daily(
     unit: d.unit,
   }));
 }
+export const interpolatedColor = "#8a94a6";
+
+// Fills every calendar day between the first and last day that actually has
+// data with a linearly-interpolated value (interpolated: true), so charts
+// plot real calendar spacing instead of squeezing sparse readings together,
+// and can render interpolated stretches distinctly from real data. Never
+// extrapolates before the first or after the last real day.
+export function denseDaily(
+  rows: { date: string; value: number; unit: string }[],
+): { date: string; value: number; unit: string; interpolated: boolean }[] {
+  if (!rows.length) return [];
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const unit = sorted[0].unit;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startTime = new Date(`${sorted[0].date}T12:00:00`).getTime();
+  const endTime = new Date(`${sorted.at(-1)!.date}T12:00:00`).getTime();
+  const totalDays = Math.round((endTime - startTime) / dayMs) + 1;
+  const byIndex = new Map<number, number>();
+  sorted.forEach((row) => {
+    const index = Math.round(
+      (new Date(`${row.date}T12:00:00`).getTime() - startTime) / dayMs,
+    );
+    byIndex.set(index, row.value);
+  });
+  const dateAt = (index: number) =>
+    new Date(startTime + index * dayMs).toISOString().slice(0, 10);
+  const result: { date: string; value: number; unit: string; interpolated: boolean }[] =
+    [];
+  let lastKnownIndex = 0;
+  for (let i = 0; i < totalDays; i++) {
+    const known = byIndex.get(i);
+    if (known !== undefined) {
+      result.push({ date: dateAt(i), value: known, unit, interpolated: false });
+      lastKnownIndex = i;
+      continue;
+    }
+    let next = i + 1;
+    while (!byIndex.has(next)) next++;
+    const from = byIndex.get(lastKnownIndex)!;
+    const to = byIndex.get(next)!;
+    const t = (i - lastKnownIndex) / (next - lastKnownIndex);
+    result.push({
+      date: dateAt(i),
+      value: from + (to - from) * t,
+      unit,
+      interpolated: true,
+    });
+  }
+  return result;
+}
+
+// Returns every calendar day between the first and last given date
+// (inclusive), so range/min-max charts can plot true gaps for missing days
+// instead of squeezing sparse readings together. Unlike denseDaily, this
+// never fabricates a value for the missing days — interpolating a min/max
+// range isn't meaningful, so callers leave those days' bars undefined.
+export function denseDateRange(dates: string[]): string[] {
+  if (!dates.length) return [];
+  const sorted = [...new Set(dates)].sort((a, b) => a.localeCompare(b));
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startTime = new Date(`${sorted[0]}T12:00:00`).getTime();
+  const endTime = new Date(`${sorted.at(-1)!}T12:00:00`).getTime();
+  const totalDays = Math.round((endTime - startTime) / dayMs) + 1;
+  return Array.from({ length: totalDays }, (_, i) =>
+    new Date(startTime + i * dayMs).toISOString().slice(0, 10),
+  );
+}
+
 export function dailyTotals(records: HealthRecord[], metric: Metric) {
   const map = new Map<string, { total: number; unit: string }>();
   records

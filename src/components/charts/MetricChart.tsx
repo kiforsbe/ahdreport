@@ -14,7 +14,10 @@ import {
   colorsByMetric,
   daily,
   decimalsByMetric,
+  denseDaily,
   format,
+  formatDate,
+  interpolatedColor,
   labels,
   outlierDates,
   plateauCallouts,
@@ -29,6 +32,31 @@ import { RangeMetricChart } from "./RangeMetricChart";
 import { CarbsChart } from "./CarbsChart";
 import { outlierDot, plateauCalloutDot } from "./outlierHelpers";
 import { SymptomOverlay } from "../SymptomOverlay";
+
+function MetricTooltip({ active, payload, label, unit, decimals }: any) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  return (
+    <div
+      style={{
+        background: "white",
+        border: "1px solid #e4e8ef",
+        borderRadius: 8,
+        padding: "8px 11px",
+        fontSize: 12,
+      }}
+    >
+      <b>{formatDate(label)}</b>
+      <div style={{ marginTop: 4 }}>
+        {format(row.value, unit, decimals)}
+        {row.interpolated && (
+          <span style={{ color: interpolatedColor }}> (interpolated)</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const MetricChart = memo(function MetricChart({
   metric,
@@ -83,8 +111,9 @@ export const MetricChart = memo(function MetricChart({
         ).map((row) => [row.date, row.value])
       : [],
   );
-  const chartRows = rows.map((row) => ({
+  const chartRows = denseDaily(rows).map((row) => ({
     ...row,
+    realValue: row.interpolated ? undefined : row.value,
     plateau: plateauByDate.get(row.date),
   }));
   const chart = (width?: number, height?: number) => (
@@ -98,14 +127,35 @@ export const MetricChart = memo(function MetricChart({
         <CartesianGrid vertical={false} stroke="#e7eaf0" />
         <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
         <YAxis domain={[axisMin, "auto"]} tick={{ fontSize: 11 }} width={45} />
-        <Tooltip formatter={(value) => format(Number(value), rows[0].unit)} />
+        <Tooltip
+          content={
+            <MetricTooltip unit={rows[0].unit} decimals={decimalsByMetric[metric]} />
+          }
+        />
         <Area
           type="monotone"
           dataKey="value"
+          stroke="none"
+          fill={`url(#fill-${metric})`}
+          isAnimationActive={!printLayout}
+        />
+        <Line
+          type="monotone"
+          dataKey="value"
+          stroke={interpolatedColor}
+          strokeWidth={2}
+          strokeDasharray="4 3"
+          strokeOpacity={0.6}
+          dot={false}
+          isAnimationActive={!printLayout}
+        />
+        <Line
+          type="monotone"
+          dataKey="realValue"
           stroke={color}
           strokeWidth={2.5}
           strokeOpacity={0.35}
-          fill={`url(#fill-${metric})`}
+          connectNulls={false}
           isAnimationActive={!printLayout}
           dot={outlierDot(outliers, color, {
             unit: rows[0].unit,

@@ -13,6 +13,7 @@ import type { HealthData, SymptomId, SymptomRecord } from "../../shared/types";
 import {
   colorsByMetric,
   dailyStats,
+  denseDateRange,
   format,
   formatDate,
   outlierDates,
@@ -183,12 +184,13 @@ export const BloodPressureChart = memo(function BloodPressureChart({
   const categoryByDate = new Map(
     categorizedDays.map((d) => [d.date, d.category]),
   );
-  const chartRows = rows.map((r) => {
-    const category = categoryByDate.get(r.date);
+  const chartRows = denseDateRange(rows.map((r) => r.date)).map((date) => {
+    const r = byDate.get(date) ?? { date };
+    const category = categoryByDate.get(date);
     return {
       ...r,
-      sOutlier: sOutliers.has(r.date),
-      dOutlier: dOutliers.has(r.date),
+      sOutlier: sOutliers.has(date),
+      dOutlier: dOutliers.has(date),
       category,
       categoryRank: category ? categoryOrder.indexOf(category) : undefined,
     };

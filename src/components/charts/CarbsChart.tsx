@@ -14,8 +14,10 @@ import {
   colorsByMetric,
   daily,
   decimalsByMetric,
+  denseDaily,
   format,
   formatDate,
+  interpolatedColor,
   outlierDates,
   plateauCallouts,
   plateaus,
@@ -44,25 +46,39 @@ function CarbsTooltip({ active, payload, label }: any) {
       <div style={{ color: colorsByMetric.sugar }}>
         of which sugar: {format(row.sugar, row.unit)}
       </div>
+      {row.interpolated && (
+        <div style={{ color: interpolatedColor }}>Interpolated (no data logged)</div>
+      )}
     </div>
   );
 }
 export const CarbsChart = memo(function CarbsChart({ records }: { records: HealthData["records"] }) {
   const printLayout = useContext(PrintLayoutContext);
   const carbTotals = new Map(
-    daily(records, "carbs", "total").map((d) => [d.date, d]),
+    denseDaily(daily(records, "carbs", "total")).map((d) => [d.date, d]),
   );
   const sugarTotals = new Map(
-    daily(records, "sugar", "total").map((d) => [d.date, d]),
+    denseDaily(daily(records, "sugar", "total")).map((d) => [d.date, d]),
   );
   const dates = [
     ...new Set([...carbTotals.keys(), ...sugarTotals.keys()]),
   ].sort((a, b) => a.localeCompare(b));
   const rows = dates.map((date) => {
-    const carbs = carbTotals.get(date)?.value ?? 0;
-    const sugar = sugarTotals.get(date)?.value ?? 0;
-    const unit = carbTotals.get(date)?.unit ?? sugarTotals.get(date)?.unit ?? "g";
-    return { date, unit, carbs, sugar, other: Math.max(0, carbs - sugar) };
+    const carbDay = carbTotals.get(date);
+    const sugarDay = sugarTotals.get(date);
+    const carbs = carbDay?.value ?? 0;
+    const sugar = sugarDay?.value ?? 0;
+    const unit = carbDay?.unit ?? sugarDay?.unit ?? "g";
+    const interpolated = Boolean(carbDay?.interpolated || sugarDay?.interpolated);
+    return {
+      date,
+      unit,
+      carbs,
+      sugar,
+      other: Math.max(0, carbs - sugar),
+      interpolated,
+      realCarbs: interpolated ? undefined : carbs,
+    };
   });
   if (!rows.length)
     return (
@@ -70,7 +86,7 @@ export const CarbsChart = memo(function CarbsChart({ records }: { records: Healt
         No carbohydrate records in this period.
       </div>
     );
-  const outliers = outlierDates(rows.map((row) => ({ date: row.date, value: row.carbs })));
+  const outliers = outlierDates(daily(records, "carbs", "total"));
   const plateauRows = plateaus(records, "carbs", "total");
   const plateauByDate = new Map(plateauRows.map((row) => [row.date, row.value]));
   const carbCallouts = new Map(
@@ -122,10 +138,27 @@ export const CarbsChart = memo(function CarbsChart({ records }: { records: Healt
         type="monotone"
         dataKey="other"
         stackId="carbs"
+        stroke="none"
+        fill="url(#fill-carbs-other)"
+        isAnimationActive={!printLayout}
+      />
+      <Line
+        type="monotone"
+        dataKey="carbs"
+        stroke={interpolatedColor}
+        strokeWidth={2}
+        strokeDasharray="4 3"
+        strokeOpacity={0.6}
+        dot={false}
+        isAnimationActive={!printLayout}
+      />
+      <Line
+        type="monotone"
+        dataKey="realCarbs"
         stroke={colorsByMetric.carbs}
         strokeWidth={2}
         strokeOpacity={0.35}
-        fill="url(#fill-carbs-other)"
+        connectNulls={false}
         isAnimationActive={!printLayout}
         dot={outlierDot(outliers, colorsByMetric.carbs, {
           valueKey: "carbs",

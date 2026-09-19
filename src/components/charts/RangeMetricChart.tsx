@@ -14,6 +14,7 @@ import {
   colorsByMetric,
   dailyStats,
   decimalsByMetric,
+  denseDateRange,
   format,
   formatDate,
   labels,
@@ -93,10 +94,24 @@ export const RangeMetricChart = memo(function RangeMetricChart({
   const outliers = outlierDates(
     rows.map((row) => ({ date: row.date, value: row.average })),
   );
-  const chartRows = rows.map((row) => ({
-    ...row,
-    isOutlier: outliers.has(row.date),
-  }));
+  const byDate = new Map(rows.map((row) => [row.date, row]));
+  const chartRows = denseDateRange(rows.map((row) => row.date)).map((date) => {
+    const row = byDate.get(date);
+    return row
+      ? { ...row, isOutlier: outliers.has(date) }
+      : {
+          date,
+          unit: rows[0].unit,
+          label: labels[metric],
+          color,
+          low: undefined,
+          high: undefined,
+          average: undefined,
+          base: undefined,
+          range: undefined,
+          isOutlier: false,
+        };
+  });
   const chart = (width?: number, height?: number) => (
     <ComposedChart
       data={chartRows}
