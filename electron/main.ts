@@ -139,7 +139,12 @@ ipcMain.handle(
       mainWindow.webContents.invalidate();
       await mainWindow.webContents.capturePage();
       const pdf = await mainWindow.webContents.printToPDF({
-        printBackground: false,
+        // Several UI elements (legend dots, glucose range-split bars, symptom
+        // timeline markers, density chips) convey meaning purely through a
+        // CSS background-color. printBackground: false strips all of those,
+        // not just decorative ones, so it stays on; the print stylesheet
+        // already forces a plain white page background for print.
+        printBackground: true,
         pageSize: "A4",
         displayHeaderFooter: true,
         headerTemplate,
