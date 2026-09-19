@@ -211,6 +211,45 @@ describe("plateauSegments / calloutsFromPlateauRows (raw rows)", () => {
   });
 });
 
+describe("plateauSegments bucket size scales with the report's date span", () => {
+  const dateAt = (dayIndex: number) =>
+    new Date(2026, 0, 1 + dayIndex).toISOString().slice(0, 10);
+  const flatRows = (count: number, value: number, startDay: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      date: dateAt(startDay + i),
+      value,
+      unit: "kg",
+    }));
+  it("keeps the original 7-day minimum for a short (~90 day or less) report span", () => {
+    // A 7-day blip lands exactly on a bucket boundary at this span, so it
+    // stays a pure, undiluted 7-day segment.
+    const rows = [
+      ...flatRows(14, 50, 0),
+      ...flatRows(7, 80, 14),
+      ...flatRows(14, 50, 21),
+    ];
+    const segments = plateauSegments(rows);
+    const blip = segments.filter((r) => r.value !== 50);
+    expect(blip).toHaveLength(7);
+    expect(blip.every((r) => r.value === 80)).toBe(true);
+  });
+  it("widens the minimum plateau length for a much longer report span", () => {
+    // Same 7-day blip, but embedded in a ~207-day span: the bucket grows
+    // to ~16 days (round(207 / 13)), so the blip no longer aligns to a
+    // bucket boundary and gets folded into a single wider, blended segment
+    // instead of standing out as its own precise 7-day feature.
+    const rows = [
+      ...flatRows(100, 50, 0),
+      ...flatRows(7, 80, 100),
+      ...flatRows(100, 50, 107),
+    ];
+    const segments = plateauSegments(rows);
+    const blended = segments.filter((r) => r.value !== 50);
+    expect(blended).toHaveLength(16);
+    expect(blended.every((r) => r.value !== 80)).toBe(true);
+  });
+});
+
 describe("blood pressure derived metrics", () => {
   const bpRows: HealthRecord[] = [
     {

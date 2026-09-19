@@ -568,12 +568,12 @@ export function outlierDates(
   );
 }
 
-// Change-point-merged plateau overlay: groups days-with-data into 7-day
-// buckets by position (not calendar weeks), then greedily merges adjacent
-// buckets whose means are close relative to their combined noise. See
-// docs/design/chart_analysis.md section 1 for the algorithm rationale.
-// Takes raw {date,value,unit} rows directly, for series that aren't a
-// stored Metric (e.g. pulse pressure, mean arterial pressure).
+// Change-point-merged plateau overlay: groups days-with-data into
+// position-based buckets (not calendar weeks), then greedily merges
+// adjacent buckets whose means are close relative to their combined
+// noise. See docs/design/chart_analysis.md section 1 for the algorithm
+// rationale. Takes raw {date,value,unit} rows directly, for series that
+// aren't a stored Metric (e.g. pulse pressure, mean arterial pressure).
 export function plateauSegments(
   dailyRows: { date: string; value: number; unit: string }[],
 ): { date: string; value: number; unit: string }[] {
@@ -587,7 +587,17 @@ export function plateauSegments(
     const m = mean(xs);
     return Math.sqrt(xs.reduce((sum, x) => sum + (x - m) ** 2, 0) / xs.length);
   };
-  const bucketSize = 7;
+  // Bucket size (the minimum plateau length) scales with the data's own
+  // date span, so a long report doesn't fragment into dozens of noisy
+  // weekly segments: aim for roughly the same number of buckets (~13,
+  // matching the original fixed 7-day bucket at a 90-day span) regardless
+  // of how long the period is. Spans of ~90 days or less keep the
+  // original 7-day minimum.
+  const spanDays =
+    (new Date(rows.at(-1)!.date).getTime() - new Date(rows[0].date).getTime()) /
+      86_400_000 +
+    1;
+  const bucketSize = Math.max(7, Math.round(spanDays / 13));
   const buckets: { values: number[]; startIndex: number; endIndex: number }[] =
     [];
   for (let i = 0; i < rows.length; i += bucketSize) {

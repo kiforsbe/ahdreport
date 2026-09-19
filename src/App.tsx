@@ -201,8 +201,11 @@ export function App() {
       if (result) {
         setData(result);
         setGlucoseRange(defaultGlucoseRange);
-        setFrom(result.diagnostics.earliest?.slice(0, 10) ?? "");
-        setTo(result.diagnostics.latest?.slice(0, 10) ?? "");
+        const latest =
+          result.diagnostics.latest?.slice(0, 10) ??
+          new Date().toISOString().slice(0, 10);
+        setTo(latest);
+        setFrom(rangeDate(90, latest));
         patientProfile.current = {
           name: result.patient?.name || "",
           personnummer: result.patient?.identifier || "",
@@ -314,6 +317,7 @@ export function App() {
             <button onClick={() => setFrom(rangeDate(7, to))}>7D</button>
             <button onClick={() => setFrom(rangeDate(30, to))}>30D</button>
             <button onClick={() => setFrom(rangeDate(90, to))}>90D</button>
+            <button onClick={() => setFrom(rangeDate(180, to))}>180D</button>
             <button onClick={() => setFrom(rangeDate(365, to))}>
               Last year
             </button>

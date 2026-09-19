@@ -1,5 +1,7 @@
 import { format } from "../../report";
 
+const PRIMARY_TEXT_COLOR = "#23314a";
+
 export function plateauCalloutDot(
   callouts: Map<string, number>,
   color: string,
@@ -27,7 +29,7 @@ export function plateauCalloutDot(
           textAnchor="middle"
           fontSize={10}
           fontWeight={600}
-          fill={color}
+          fill={PRIMARY_TEXT_COLOR}
         >
           {format(value, options?.unit ?? "", options?.decimals)}
         </text>
