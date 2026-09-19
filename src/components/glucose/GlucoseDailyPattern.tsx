@@ -1,7 +1,7 @@
 import { memo } from "react";
-import { type GlucoseRange, type HourProfile, formatMmol, glucoseColors } from "../../glucose";
+import { type GlucoseRange, type HourProfile, formatMmol, glucoseColors, niceYMax } from "../../glucose";
 
-const W = 760, H = 220, L = 34, R = 10, T = 10, B = 24, Y_MAX = 16;
+const W = 760, H = 220, L = 34, R = 10, T = 10, B = 24;
 type Band = "p5" | "p25" | "p50" | "p75" | "p95";
 
 // Hour-of-day percentile profile (AGP-style). Only rendered for continuous data.
@@ -14,8 +14,9 @@ export const GlucoseDailyPattern = memo(function GlucoseDailyPattern({
 }) {
   const filled = profile.filter((p) => p.percentiles);
   if (!filled.length) return null;
+  const yMax = niceYMax(Math.max(...filled.map((p) => p.percentiles!.p95)));
   const x = (hour: number) => L + (hour / 23) * (W - L - R);
-  const y = (v: number) => T + (1 - Math.min(v, Y_MAX) / Y_MAX) * (H - T - B);
+  const y = (v: number) => T + (1 - Math.min(v, yMax) / yMax) * (H - T - B);
   // Break the shapes at hours without readings.
   const runs: HourProfile[][] = [[]];
   for (const p of profile) {
@@ -30,7 +31,7 @@ export const GlucoseDailyPattern = memo(function GlucoseDailyPattern({
   return (
     <div className="glucose-chart-wrap">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Glucose percentiles by hour of day">
-        {[0, 4, 8, 12, 16].map((v) => (
+        {Array.from({ length: yMax / 2 + 1 }, (_, k) => k * 2).map((v) => (
           <g key={v}>
             <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#eef1f6" />
             <text x={L - 7} y={y(v) + 3.5} fontSize="10" fill="#8a94a6" textAnchor="end">{v}</text>

@@ -93,6 +93,12 @@ export function medianOf(values: number[]) {
   if (!values.length) return undefined;
   return quantile(values.slice().sort((a, b) => a - b), 0.5);
 }
+// Rounds up to the nearest even number, with a floor of 14 (the top of every
+// target-range preset) so a chart never compresses in-range data to make
+// room for a single high outlier.
+export function niceYMax(maxValue: number): number {
+  return Math.max(14, Math.ceil((maxValue + 1) / 2) * 2);
+}
 function populationSd(values: number[], mean: number) {
   return Math.sqrt(values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length);
 }

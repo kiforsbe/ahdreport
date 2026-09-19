@@ -143,6 +143,40 @@ describe("glucose charts", () => {
     expect(container.querySelector("path.glucose-median-line")!.getAttribute("d")!.match(/M/g)).toHaveLength(2);
   });
 
+  it("scales the y-axis to readings above the old fixed ceiling instead of clamping them", () => {
+    const records = [glucose(at(0, 8), 12), glucose(at(1, 8), 20)];
+    const { container } = render(
+      <GlucoseDailyChart days={glucoseDaily(records, defaultGlucoseRange)} range={defaultGlucoseRange} from={localDay(at(0, 0))} to={localDay(at(1, 0))} />,
+    );
+    const circles = [...container.querySelectorAll("circle.glucose-median")];
+    expect(circles).toHaveLength(2);
+    const cy = (el: Element) => Number(el.getAttribute("cy"));
+    // 20 mmol/L must be plotted strictly higher (smaller cy) than 12 mmol/L.
+    expect(cy(circles[1])).toBeLessThan(cy(circles[0]));
+  });
+
+  it("does not flatten two readings that both exceed the old fixed ceiling of 14 mmol/L", () => {
+    const records = [glucose(at(0, 8), 15), glucose(at(1, 8), 25)];
+    const { container } = render(
+      <GlucoseDailyChart days={glucoseDaily(records, defaultGlucoseRange)} range={defaultGlucoseRange} from={localDay(at(0, 0))} to={localDay(at(1, 0))} />,
+    );
+    const circles = [...container.querySelectorAll("circle.glucose-median")];
+    expect(circles).toHaveLength(2);
+    const cy = (el: Element) => Number(el.getAttribute("cy"));
+    // Under the old hardcoded Y_MAX = 14, both 15 and 25 mmol/L would have
+    // clamped to the same y position at the top of the chart.
+    expect(cy(circles[1])).toBeLessThan(cy(circles[0]));
+  });
+
+  it("aggregates to one point per week for periods over 180 days", () => {
+    const records = Array.from({ length: 200 }, (_, d) => glucose(at(d, 8), 6 + (d % 5)));
+    const { container } = render(
+      <GlucoseDailyChart days={glucoseDaily(records, defaultGlucoseRange)} range={defaultGlucoseRange} from={localDay(at(0, 0))} to={localDay(at(199, 0))} />,
+    );
+    expect(screen.getByText(/one point per week/)).toBeInTheDocument();
+    expect(container.querySelectorAll("circle.glucose-median")).toHaveLength(Math.ceil(200 / 7));
+  });
+
   it("shows a tooltip for the hovered day", () => {
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
       left: 0, top: 0, width: 760, height: 220, right: 760, bottom: 220, x: 0, y: 0, toJSON() {},

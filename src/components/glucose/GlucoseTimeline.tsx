@@ -14,12 +14,13 @@ import {
   glucoseStatusColor,
   localDay,
   medianOf,
+  niceYMax,
   shortDate,
   sleepNights,
   timeOfDay,
 } from "../../glucose";
 
-const W = 760, L = 92, R = 8, T = 6, PLOT_H = 170, LANE_H = 30, Y_MAX = 14;
+const W = 760, L = 92, R = 8, T = 6, PLOT_H = 170, LANE_H = 30;
 const DAY_MS = 24 * HOUR_MS;
 const LANES = ["Carbohydrates", "Insulin", "Activity", "Sleep"];
 const LANE_COLORS = [glucoseColors.carbs, glucoseColors.insulin, glucoseColors.activity, glucoseColors.sleep];
@@ -104,7 +105,8 @@ function buildTimeline(records: HealthRecord[], range: GlucoseRange, from: strin
     insulin: insulin.filter((u) => Math.abs(u.t - t) < window),
     sessions: sessions.filter((s) => Math.abs(s.start - t) < window),
   });
-  return { start, end, aggregated, x, points, lanes, eventsNear };
+  const yMax = niceYMax(Math.max(...points.map((p) => p.v)));
+  return { start, end, aggregated, x, points, lanes, eventsNear, yMax };
 }
 
 function LaneMark({ mark, x, top, color }: { mark: Mark; x: (t: number) => number; top: number; color: string }) {
@@ -153,8 +155,8 @@ export const GlucoseTimeline = memo(function GlucoseTimeline({
   const model = useMemo(() => buildTimeline(records, range, from, to, continuous), [records, range, from, to, continuous]);
   const [hover, setHover] = useState<Point>();
   if (!model) return null;
-  const { x, points, lanes, aggregated } = model;
-  const y = (v: number) => T + (1 - Math.min(v, Y_MAX) / Y_MAX) * PLOT_H;
+  const { x, points, lanes, aggregated, yMax } = model;
+  const y = (v: number) => T + (1 - Math.min(v, yMax) / yMax) * PLOT_H;
   const laneTop = (k: number) => LANES_TOP + k * LANE_H;
   const days = Math.round((model.end - model.start) / DAY_MS);
   const labelEvery = Math.max(1, Math.ceil(days / 8));
@@ -179,7 +181,7 @@ export const GlucoseTimeline = memo(function GlucoseTimeline({
   return (
     <div className="glucose-chart-wrap">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Glucose readings with carbohydrate, insulin, activity and sleep lanes">
-        {[0, 2, 4, 6, 8, 10, 12, 14].map((v) => (
+        {Array.from({ length: yMax / 2 + 1 }, (_, k) => k * 2).map((v) => (
           <g key={v}>
             <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="#eef1f6" />
             <text x={L - 7} y={y(v) + 3.5} fontSize="10" fill="#8a94a6" textAnchor="end">{v}</text>

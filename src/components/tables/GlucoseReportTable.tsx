@@ -18,6 +18,7 @@ import {
   glucosePresetLabel,
   glucoseRangeText,
   glucoseSummary,
+  niceYMax,
 } from "../../glucose";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyDistribution } from "../DailyDistribution";
@@ -55,6 +56,9 @@ export const GlucoseReportTable = memo(function GlucoseReportTable({
   const bounds = boundsOf(days.flatMap((day) => day.readings.map((r) => r.value)));
   const columnMin = Math.min(2, bounds.min);
   const columnMax = Math.max(14, bounds.max);
+  // Shared across every row's trace, like columnMin/columnMax above are for
+  // DailyDistribution, so rows stay visually comparable down the column.
+  const traceYMax = niceYMax(bounds.max);
   const showMeal = !printLayout && days.some((day) => day.readings.some((r) => r.category));
   const traceWidth = printLayout ? 190 : 240;
   return (
@@ -129,7 +133,7 @@ export const GlucoseReportTable = memo(function GlucoseReportTable({
                 <td className="glucose-num">{`${mmolOrDash(day.beforeMealMedian)} / ${mmolOrDash(day.afterMealMedian)}`}</td>
               )}
               <td>
-                <GlucoseDayTrace day={day} range={range} width={traceWidth} />
+                <GlucoseDayTrace day={day} range={range} width={traceWidth} yMax={traceYMax} />
               </td>
               <td className="glucose-num">{insulinCell(day)}</td>
             </tr>

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { HealthData } from "../shared/types";
 import {
   boundsOf,
@@ -91,7 +92,7 @@ function GlucoseOverviewCard({
   from: string;
   to: string;
 }) {
-  const summary = glucoseSummary(records, range, from, to);
+  const summary = useMemo(() => glucoseSummary(records, range, from, to), [records, range, from, to]);
   const bounds = `${formatMmol(range.low)}–${formatMmol(range.high)}`;
   return (
     <article className="card">

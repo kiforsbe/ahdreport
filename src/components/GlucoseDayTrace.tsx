@@ -10,7 +10,8 @@ import {
 
 const HEIGHT = 40;
 const PLOT = 28;
-const Y_MAX = 14;
+// Standalone default (no caller currently uses this): the pre-fix ceiling.
+const DEFAULT_Y_MAX = 14;
 
 // Clock-time trace (x = 00:00–24:00). The generic DayTrace spaces points by
 // index, which misrepresents irregular fingerstick timing.
@@ -18,14 +19,18 @@ export const GlucoseDayTrace = memo(function GlucoseDayTrace({
   day,
   range,
   width,
+  yMax = DEFAULT_Y_MAX,
 }: {
   day: GlucoseDay;
   range: GlucoseRange;
   width: number;
+  // Shared across a column of rows (see GlucoseReportTable), so every row in
+  // the table plots on the same scale, like DailyDistribution's columnMax.
+  yMax?: number;
 }) {
   const dayStart = new Date(`${day.date}T00:00:00`).getTime();
   const x = (t: number) => ((t - dayStart) / (24 * HOUR_MS)) * width;
-  const y = (v: number) => 1 + (1 - Math.min(v, Y_MAX) / Y_MAX) * (PLOT - 2);
+  const y = (v: number) => 1 + (1 - Math.min(v, yMax) / yMax) * (PLOT - 2);
   const points = day.readings.map((r) => ({ t: Date.parse(r.date), v: r.value }));
   const continuous = points.length > 40;
   let path = "";
