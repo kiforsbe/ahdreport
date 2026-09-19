@@ -646,7 +646,7 @@ export function plateauSegments(
   dailyRows: { date: string; value: number; unit: string }[],
 ): { date: string; value: number; unit: string }[] {
   const rows = [...dailyRows].sort((a, b) => a.date.localeCompare(b.date));
-  if (rows.length < 14) return [];
+  if (!rows.length) return [];
   const values = rows.map((r) => r.value);
   const range = Math.max(...values) - Math.min(...values);
   const noiseFloor = range * 0.02;
@@ -667,29 +667,29 @@ export function plateauSegments(
     1;
   const bucketSize = Math.max(7, Math.round(spanDays / 13));
 
-  // Never let a plateau segment bridge a stretch with no real data: reuse
-  // denseDaily's own interpolation boundaries (the same ones the charts
-  // draw as a dashed gap) to split the real readings into calendar-
-  // contiguous runs, breaking wherever an unreported gap is at least a
-  // bucket's worth of days long. Each run is bucketed/merged independently,
-  // so a segment's mean and merge decision never mixes readings from
-  // opposite sides of a stretch with no data.
+  // Group real readings into calendar-contiguous runs, breaking wherever
+  // two consecutive real readings are more than a bucket's worth of days
+  // apart — that stretch has too little data to say anything about, and a
+  // plateau segment never bridges it. Within a run, small gaps are filled
+  // in via the same linear interpolation the charts draw (denseDaily), so
+  // a run's length — and the minimum-length check below — is judged by the
+  // calendar days it actually spans rather than by how many raw readings
+  // happen to fall inside it: sparse-but-regular readings over a long span
+  // should still read as a plateau, not get dropped for being undersampled.
   type Row = { date: string; value: number; unit: string };
-  const runs: Row[][] = [[]];
-  let gapDays = 0;
-  for (const day of denseDaily(rows)) {
-    if (day.interpolated) {
-      gapDays++;
-      if (gapDays >= bucketSize && runs.at(-1)!.length) runs.push([]);
-      continue;
-    }
-    gapDays = 0;
-    runs.at(-1)!.push({ date: day.date, value: day.value, unit: day.unit });
+  const realRuns: Row[][] = [[rows[0]]];
+  for (let i = 1; i < rows.length; i++) {
+    const gapDays =
+      (new Date(rows[i].date).getTime() - new Date(rows[i - 1].date).getTime()) /
+      86_400_000;
+    if (gapDays > bucketSize) realRuns.push([]);
+    realRuns.at(-1)!.push(rows[i]);
   }
 
   const unit = rows[0].unit;
   const result: Row[] = [];
-  for (const run of runs) {
+  for (const realRun of realRuns) {
+    const run = denseDaily(realRun);
     if (run.length < 14) continue;
     const runValues = run.map((r) => r.value);
     const buckets: { values: number[]; startIndex: number; endIndex: number }[] =

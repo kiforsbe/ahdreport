@@ -353,6 +353,24 @@ describe("plateauSegments never bridges a stretch with no data", () => {
     expect(segments).toHaveLength(20);
     expect(segments.every((s) => s.value === 100)).toBe(true);
   });
+  it("still finds a plateau in sparse-but-regular readings spanning a long calendar range", () => {
+    // Only 11 real readings (every 3rd day) over a 31-day span — too few
+    // raw readings to hit the old 14-reading minimum, but the span itself
+    // is long enough, and the gaps between readings are small enough
+    // (well under the 7-day bucket), that this should still read as one
+    // steady 31-day plateau once the small gaps are filled in.
+    const rows = Array.from({ length: 11 }, (_, i) => ({
+      date: dateAt(i * 3),
+      value: 20,
+      unit: "%",
+    }));
+    const segments = plateauSegments(rows);
+    expect(segments).toHaveLength(31);
+    expect(segments.every((s) => s.value === 20)).toBe(true);
+    // Includes dates that were only ever interpolated filler, not raw
+    // readings, proving the plateau spans the full calendar range.
+    expect(segments.some((s) => s.date === dateAt(1))).toBe(true);
+  });
 });
 
 describe("blood pressure derived metrics", () => {
