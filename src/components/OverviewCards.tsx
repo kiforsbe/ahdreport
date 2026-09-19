@@ -9,19 +9,22 @@ import {
   latest,
   median,
 } from "../report";
+import { type GlucoseRange, formatMmol, glucoseSummary } from "../glucose";
 import { LazyDisclosure } from "./LazyDisclosure";
 
 export function OverviewCards({
   records,
   periodLabel,
   collapsible = false,
+  glucose,
 }: {
   records: HealthData["records"];
   periodLabel: string;
   collapsible?: boolean;
+  glucose?: { range: GlucoseRange; from: string; to: string };
 }) {
   const renderCards = () => (
-    <div className="cards">
+    <div className={glucose ? "cards cards-6" : "cards"}>
       {highlights.map((metric) => {
         const item = latest(records, metric);
         const values = records
@@ -55,6 +58,7 @@ export function OverviewCards({
           </article>
         );
       })}
+      {glucose && <GlucoseOverviewCard records={records} {...glucose} />}
     </div>
   );
   if (collapsible)
@@ -72,5 +76,32 @@ export function OverviewCards({
       <p className="cards-period">{periodLabel}</p>
       {renderCards()}
     </section>
+  );
+}
+
+// Does not call report.latest(): tests/overviewCardsLazy.test.tsx counts those calls per highlight.
+function GlucoseOverviewCard({
+  records,
+  range,
+  from,
+  to,
+}: {
+  records: HealthData["records"];
+  range: GlucoseRange;
+  from: string;
+  to: string;
+}) {
+  const summary = glucoseSummary(records, range, from, to);
+  const bounds = `${formatMmol(range.low)}–${formatMmol(range.high)}`;
+  return (
+    <article className="card">
+      <span>Blood glucose</span>
+      <strong>{summary ? `${formatMmol(summary.median)} mmol/L` : "—"}</strong>
+      <small>
+        {summary
+          ? `Median · ${Math.round(summary.split.within * 100)}% of ${summary.dense ? "time" : "readings"} in ${bounds}`
+          : "No records"}
+      </small>
+    </article>
   );
 }
