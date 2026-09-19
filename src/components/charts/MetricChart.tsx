@@ -17,6 +17,7 @@ import {
   format,
   labels,
   outlierDates,
+  plateauCallouts,
   plateauMetrics,
   plateaus,
   totalsMetrics,
@@ -26,7 +27,7 @@ import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { RangeMetricChart } from "./RangeMetricChart";
 import { CarbsChart } from "./CarbsChart";
-import { outlierDot } from "./outlierHelpers";
+import { outlierDot, plateauCalloutDot } from "./outlierHelpers";
 import { SymptomOverlay } from "../SymptomOverlay";
 
 export const MetricChart = memo(function MetricChart({
@@ -73,6 +74,15 @@ export const MetricChart = memo(function MetricChart({
     ? plateaus(records, metric, totalsMetrics.includes(metric) ? "total" : "average")
     : [];
   const plateauByDate = new Map(plateauRows.map((row) => [row.date, row.value]));
+  const calloutsByDate = new Map(
+    plateauRows.length
+      ? plateauCallouts(
+          records,
+          metric,
+          totalsMetrics.includes(metric) ? "total" : "average",
+        ).map((row) => [row.date, row.value])
+      : [],
+  );
   const chartRows = rows.map((row) => ({
     ...row,
     plateau: plateauByDate.get(row.date),
@@ -109,7 +119,10 @@ export const MetricChart = memo(function MetricChart({
             name="Plateau"
             stroke={color}
             strokeWidth={2.5}
-            dot={false}
+            dot={plateauCalloutDot(calloutsByDate, color, {
+              unit: rows[0].unit,
+              decimals: decimalsByMetric[metric],
+            })}
             isAnimationActive={!printLayout}
           />
         )}

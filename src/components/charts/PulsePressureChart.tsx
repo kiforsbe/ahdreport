@@ -1,18 +1,26 @@
 import { memo, useContext } from "react";
 import {
   Area,
-  AreaChart,
   CartesianGrid,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import type { HealthData } from "../../shared/types";
-import { bpDerived, format, formatDate, outlierDates } from "../../report";
+import {
+  bpDerived,
+  calloutsFromPlateauRows,
+  format,
+  formatDate,
+  outlierDates,
+  plateauSegments,
+} from "../../report";
 import { niceAxisMin } from "../../chartMath";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
-import { outlierDot } from "./outlierHelpers";
+import { outlierDot, plateauCalloutDot } from "./outlierHelpers";
 
 const PULSE_PRESSURE_COLOR = "#5c5f66";
 const MAP_COLOR = "#0b7285";
@@ -56,8 +64,29 @@ export const PulsePressureChart = memo(function PulsePressureChart({ records }: 
   );
   const values = rows.flatMap((r) => [r.pulsePressure, r.map]);
   const axisMin = niceAxisMin(Math.min(...values), Math.max(...values));
+  const pulsePressurePlateau = plateauSegments(
+    rows.map((r) => ({ date: r.date, value: r.pulsePressure, unit: "mmHg" })),
+  );
+  const pulsePressurePlateauByDate = new Map(
+    pulsePressurePlateau.map((row) => [row.date, row.value]),
+  );
+  const pulsePressureCallouts = new Map(
+    calloutsFromPlateauRows(pulsePressurePlateau).map((row) => [row.date, row.value]),
+  );
+  const mapPlateau = plateauSegments(
+    rows.map((r) => ({ date: r.date, value: r.map, unit: "mmHg" })),
+  );
+  const mapPlateauByDate = new Map(mapPlateau.map((row) => [row.date, row.value]));
+  const mapCallouts = new Map(
+    calloutsFromPlateauRows(mapPlateau).map((row) => [row.date, row.value]),
+  );
+  const chartRows = rows.map((row) => ({
+    ...row,
+    pulsePressurePlateau: pulsePressurePlateauByDate.get(row.date),
+    mapPlateau: mapPlateauByDate.get(row.date),
+  }));
   const chart = (width?: number, height?: number) => (
-    <AreaChart data={rows} width={width} height={height}>
+    <ComposedChart data={chartRows} width={width} height={height}>
       <CartesianGrid vertical={false} stroke="#e7eaf0" />
       <XAxis dataKey="date" tick={{ fontSize: 11 }} minTickGap={35} />
       <YAxis domain={[axisMin, "auto"]} tick={{ fontSize: 11 }} width={45} />
@@ -88,7 +117,35 @@ export const PulsePressureChart = memo(function PulsePressureChart({ records }: 
         })}
         isAnimationActive={!printLayout}
       />
-    </AreaChart>
+      {pulsePressurePlateau.length > 0 && (
+        <Line
+          type="stepAfter"
+          dataKey="pulsePressurePlateau"
+          name="Pulse pressure plateau"
+          stroke={PULSE_PRESSURE_COLOR}
+          strokeWidth={2.5}
+          dot={plateauCalloutDot(pulsePressureCallouts, PULSE_PRESSURE_COLOR, {
+            unit: "mmHg",
+            decimals: 0,
+          })}
+          isAnimationActive={!printLayout}
+        />
+      )}
+      {mapPlateau.length > 0 && (
+        <Line
+          type="stepAfter"
+          dataKey="mapPlateau"
+          name="MAP plateau"
+          stroke={MAP_COLOR}
+          strokeWidth={2.5}
+          dot={plateauCalloutDot(mapCallouts, MAP_COLOR, {
+            unit: "mmHg",
+            decimals: 0,
+          })}
+          isAnimationActive={!printLayout}
+        />
+      )}
+    </ComposedChart>
   );
   return (
     <article className="panel">

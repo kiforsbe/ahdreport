@@ -572,14 +572,12 @@ export function outlierDates(
 // buckets by position (not calendar weeks), then greedily merges adjacent
 // buckets whose means are close relative to their combined noise. See
 // docs/design/chart_analysis.md section 1 for the algorithm rationale.
-export function plateaus(
-  records: HealthRecord[],
-  metric: Metric,
-  aggregate: "average" | "total" = "average",
+// Takes raw {date,value,unit} rows directly, for series that aren't a
+// stored Metric (e.g. pulse pressure, mean arterial pressure).
+export function plateauSegments(
+  dailyRows: { date: string; value: number; unit: string }[],
 ): { date: string; value: number; unit: string }[] {
-  const rows = daily(records, metric, aggregate).sort((a, b) =>
-    a.date.localeCompare(b.date),
-  );
+  const rows = [...dailyRows].sort((a, b) => a.date.localeCompare(b.date));
   if (rows.length < 14) return [];
   const values = rows.map((r) => r.value);
   const range = Math.max(...values) - Math.min(...values);
@@ -625,6 +623,39 @@ export function plateaus(
     }
   }
   return result;
+}
+
+export function plateaus(
+  records: HealthRecord[],
+  metric: Metric,
+  aggregate: "average" | "total" = "average",
+): { date: string; value: number; unit: string }[] {
+  return plateauSegments(daily(records, metric, aggregate));
+}
+
+// Picks the middle date of each plateau segment for a callout label,
+// relying on plateauSegments() reusing the exact same segmentMean number
+// across every date in a segment to detect segment boundaries.
+export function calloutsFromPlateauRows(
+  rows: { date: string; value: number; unit: string }[],
+): { date: string; value: number; unit: string }[] {
+  const callouts: { date: string; value: number; unit: string }[] = [];
+  let segmentStart = 0;
+  for (let i = 1; i <= rows.length; i++) {
+    if (i === rows.length || rows[i].value !== rows[segmentStart].value) {
+      callouts.push(rows[segmentStart + Math.floor((i - segmentStart) / 2)]);
+      segmentStart = i;
+    }
+  }
+  return callouts;
+}
+
+export function plateauCallouts(
+  records: HealthRecord[],
+  metric: Metric,
+  aggregate: "average" | "total" = "average",
+): { date: string; value: number; unit: string }[] {
+  return calloutsFromPlateauRows(plateaus(records, metric, aggregate));
 }
 
 export interface BpDerivedDay {
@@ -815,6 +846,16 @@ export const plateauMetrics: Metric[] = [
   "protein",
   "fat",
   "weight",
+  "sleep",
+  "restingHeartRate",
+  "bodyTemperature",
+  "bodyMassIndex",
+  "bodyFatPercentage",
+  "waistCircumference",
+  "leanBodyMass",
+  "heartRateVariability",
+  "oxygenSaturation",
+  "respiratoryRate",
 ];
 
 export function quantile(sorted: number[], p: number) {

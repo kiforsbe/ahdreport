@@ -18,7 +18,10 @@ import {
   longestElevatedRun,
   metricGroups,
   outlierDates,
+  calloutsFromPlateauRows,
+  plateauCallouts,
   plateaus,
+  plateauSegments,
   rangeMetadata,
 } from "../src/report";
 import type { HealthRecord } from "../src/shared/types";
@@ -141,21 +144,22 @@ describe("outlierDates", () => {
   });
 });
 
+const twoRegimeRows: HealthRecord[] = [
+  ...Array.from({ length: 7 }, (_, i) => ({
+    metric: "weight" as const,
+    date: `2026-01-${String(i + 1).padStart(2, "0")}T08:00:00.000Z`,
+    value: 70,
+    unit: "kg",
+  })),
+  ...Array.from({ length: 7 }, (_, i) => ({
+    metric: "weight" as const,
+    date: `2026-01-${String(i + 8).padStart(2, "0")}T08:00:00.000Z`,
+    value: 90,
+    unit: "kg",
+  })),
+];
+
 describe("plateaus", () => {
-  const twoRegimeRows: HealthRecord[] = [
-    ...Array.from({ length: 7 }, (_, i) => ({
-      metric: "weight" as const,
-      date: `2026-01-${String(i + 1).padStart(2, "0")}T08:00:00.000Z`,
-      value: 70,
-      unit: "kg",
-    })),
-    ...Array.from({ length: 7 }, (_, i) => ({
-      metric: "weight" as const,
-      date: `2026-01-${String(i + 8).padStart(2, "0")}T08:00:00.000Z`,
-      value: 90,
-      unit: "kg",
-    })),
-  ];
   it("merges into two segments for a clear two-regime series", () => {
     const result = plateaus(twoRegimeRows, "weight");
     expect(result).toHaveLength(14);
@@ -164,6 +168,46 @@ describe("plateaus", () => {
   });
   it("returns no segments below the 14-day-with-data minimum", () => {
     expect(plateaus(twoRegimeRows.slice(0, 13), "weight")).toEqual([]);
+  });
+});
+
+describe("plateauCallouts", () => {
+  it("returns one midpoint per segment", () => {
+    const result = plateauCallouts(twoRegimeRows, "weight");
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ date: "2026-01-04", value: 70 });
+    expect(result[1]).toMatchObject({ date: "2026-01-11", value: 90 });
+  });
+  it("returns no callouts below the 14-day-with-data minimum", () => {
+    expect(plateauCallouts(twoRegimeRows.slice(0, 13), "weight")).toEqual([]);
+  });
+});
+
+describe("plateauSegments / calloutsFromPlateauRows (raw rows)", () => {
+  const twoRegimeDailyRows = [
+    ...Array.from({ length: 7 }, (_, i) => ({
+      date: `2026-01-${String(i + 1).padStart(2, "0")}`,
+      value: 40,
+      unit: "mmHg",
+    })),
+    ...Array.from({ length: 7 }, (_, i) => ({
+      date: `2026-01-${String(i + 8).padStart(2, "0")}`,
+      value: 55,
+      unit: "mmHg",
+    })),
+  ];
+  it("merges a raw {date,value,unit} series into segments, for values that aren't a stored Metric", () => {
+    const segments = plateauSegments(twoRegimeDailyRows);
+    expect(segments).toHaveLength(14);
+    expect(segments.slice(0, 7).every((r) => r.value === 40)).toBe(true);
+    expect(segments.slice(7).every((r) => r.value === 55)).toBe(true);
+    const callouts = calloutsFromPlateauRows(segments);
+    expect(callouts).toHaveLength(2);
+    expect(callouts[0]).toMatchObject({ date: "2026-01-04", value: 40 });
+    expect(callouts[1]).toMatchObject({ date: "2026-01-11", value: 55 });
+  });
+  it("returns no segments below the 14-day minimum", () => {
+    expect(plateauSegments(twoRegimeDailyRows.slice(0, 13))).toEqual([]);
   });
 });
 

@@ -17,10 +17,11 @@ import {
   format,
   formatDate,
   outlierDates,
+  plateauCallouts,
   plateaus,
 } from "../../report";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
-import { outlierDot } from "./outlierHelpers";
+import { outlierDot, plateauCalloutDot } from "./outlierHelpers";
 
 function CarbsTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
@@ -72,9 +73,24 @@ export const CarbsChart = memo(function CarbsChart({ records }: { records: Healt
   const outliers = outlierDates(rows.map((row) => ({ date: row.date, value: row.carbs })));
   const plateauRows = plateaus(records, "carbs", "total");
   const plateauByDate = new Map(plateauRows.map((row) => [row.date, row.value]));
+  const carbCallouts = new Map(
+    plateauRows.length
+      ? plateauCallouts(records, "carbs", "total").map((row) => [row.date, row.value])
+      : [],
+  );
+  const sugarPlateauRows = plateaus(records, "sugar", "total");
+  const sugarPlateauByDate = new Map(
+    sugarPlateauRows.map((row) => [row.date, row.value]),
+  );
+  const sugarCallouts = new Map(
+    sugarPlateauRows.length
+      ? plateauCallouts(records, "sugar", "total").map((row) => [row.date, row.value])
+      : [],
+  );
   const chartRows = rows.map((row) => ({
     ...row,
     plateau: plateauByDate.get(row.date),
+    sugarPlateau: sugarPlateauByDate.get(row.date),
   }));
   const chart = (width?: number, height?: number) => (
     <ComposedChart data={chartRows} width={width} height={height}>
@@ -124,7 +140,24 @@ export const CarbsChart = memo(function CarbsChart({ records }: { records: Healt
           name="Plateau"
           stroke={colorsByMetric.carbs}
           strokeWidth={2.5}
-          dot={false}
+          dot={plateauCalloutDot(carbCallouts, colorsByMetric.carbs, {
+            unit: rows[0].unit,
+            decimals: decimalsByMetric.carbs,
+          })}
+          isAnimationActive={!printLayout}
+        />
+      )}
+      {sugarPlateauRows.length > 0 && (
+        <Line
+          type="stepAfter"
+          dataKey="sugarPlateau"
+          name="Sugar plateau"
+          stroke={colorsByMetric.sugar}
+          strokeWidth={2.5}
+          dot={plateauCalloutDot(sugarCallouts, colorsByMetric.sugar, {
+            unit: rows[0].unit,
+            decimals: decimalsByMetric.sugar,
+          })}
           isAnimationActive={!printLayout}
         />
       )}

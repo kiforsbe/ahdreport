@@ -78,7 +78,6 @@ export const GlucoseReportTable = memo(function GlucoseReportTable({
         <thead>
           <tr>
             <th>Date</th>
-            <th>Readings</th>
             <th>Daily distribution (mmol/L)</th>
             <th>Below / within / above</th>
             {showMeal && (
@@ -101,7 +100,6 @@ export const GlucoseReportTable = memo(function GlucoseReportTable({
           {days.map((day) => (
             <tr key={day.date}>
               <td>{formatDate(day.date)}</td>
-              <td>{day.count}</td>
               <td>
                 <DailyDistribution
                   min={day.min}
