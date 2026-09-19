@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glucose summary prototype</title>
+<link rel="stylesheet" href="app-base.css" />
+<style>
+  /* ---- prototype chrome (not part of the app) ---- */
+  .proto-bar {
+    display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+    border: 1px dashed #b6c2d9; border-radius: 10px; padding: 10px 14px;
+    margin-bottom: 22px; font-size: 12px; color: #536176; background: #fbfcfe;
+  }
+  .proto-bar b { color: #23314a; }
+  .proto-bar .seg { display: inline-flex; gap: 4px; }
+  .proto-bar button { padding: 5px 10px; font-size: 12px; }
+  .proto-bar button[aria-pressed="true"] { background: #e8edff; border-color: #4263eb; color: #243c9d; font-weight: 600; }
+  .unchanged {
+    border: 1px dashed #d8deea; border-radius: 10px; color: #98a2b3;
+    font-size: 12px; padding: 10px 14px; margin: 18px 0;
+  }
+  .new-tag {
+    background: #e8edff; border-radius: 999px; color: #243c9d; font-size: 10px;
+    font-weight: 700; margin-left: 8px; padding: 2px 7px; vertical-align: 2px;
+  }
+
+  /* ---- proposed app styles ---- */
+  .cards.cards-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .glucose-group { margin-top: 36px; }
+  .glucose-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 15px; }
+  .glucose-section-heading h2 { font-size: 21px; letter-spacing: -0.025em; margin: 3px 0 5px; }
+  .glucose-section-copy { color: #667085; margin: 0; }
+  .glucose-range-control { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #667085; }
+  .glucose-range-control select, .glucose-range-control input {
+    border: 1px solid #d8deea; border-radius: 7px; background: white; color: #23314a; padding: 7px 8px;
+  }
+  .glucose-range-control input { width: 62px; font-variant-numeric: tabular-nums; }
+  .glucose-range-control select:focus-visible, .glucose-range-control input:focus-visible,
+  button:focus-visible { outline: 2px solid #dce5ff; outline-offset: 1px; border-color: #4263eb; }
+  .glucose-range-print { display: none; font-size: 12px; color: #536176; }
+
+  .glucose-summary-card {
+    display: grid; grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+    gap: 28px; margin: 18px 0 15px; padding: 22px;
+  }
+  .glucose-headline span { font-size: 13px; color: #667085; }
+  .glucose-headline strong { display: block; font-size: 52px; letter-spacing: -0.04em; line-height: 1; margin: 12px 0 6px; font-variant-numeric: tabular-nums; }
+  .glucose-headline strong em { font-style: normal; font-size: 17px; font-weight: 500; letter-spacing: 0; color: #536176; margin-left: 6px; }
+  .glucose-stats { border-top: 1px solid #e5e9f0; margin: 16px 0 0; padding-top: 12px; display: grid; gap: 9px; }
+  .glucose-stats div { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .glucose-stats dt { color: #667085; }
+  .glucose-stats dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .glucose-stats dd small { font-weight: 400; margin-left: 4px; }
+  .glucose-chart-title { display: flex; justify-content: space-between; font-size: 12px; color: #667085; margin-bottom: 4px; }
+  .glucose-chart-title b { color: #23314a; font-weight: 600; }
+  .chart-wrap { position: relative; }
+  .chart-wrap svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .range-split { margin-top: 12px; }
+  .range-split-bar { display: flex; gap: 2px; height: 10px; }
+  .range-split-bar i { display: block; border-radius: 4px; min-width: 4px; }
+  .range-split-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 8px; font-size: 12px; color: #536176; }
+  .range-split-legend span::before {
+    content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--c); margin-right: 6px; vertical-align: 0;
+  }
+  .range-split-legend b { color: #152033; font-variant-numeric: tabular-nums; }
+  .glucose-card-footer {
+    grid-column: 1 / -1; border-top: 1px solid #e5e9f0; padding-top: 12px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; color: #667085;
+  }
+  .density-chip { border-radius: 999px; padding: 3px 10px; font-weight: 600; font-size: 11px; }
+  .density-chip.dense { background: #e8edff; color: #243c9d; }
+  .density-chip.sparse { background: #eef2f6; color: #475467; }
+
+  .glucose-overview-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, 0.9fr); gap: 15px; }
+  .glucose-panel-heading { margin-bottom: 10px; }
+  .glucose-panel-heading h3 { margin: 0 0 5px; }
+  .glucose-panel-heading small, .glucose-note, .assoc-row > small { color: #718096; font-size: 11px; }
+  .timeline-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 11px; color: #718096; }
+  .timeline-legend span::before {
+    content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--c); margin-right: 5px;
+  }
+  .assoc-row { border-top: 1px solid #e5e9f0; padding: 11px 0; }
+  .assoc-row:first-of-type { border-top: 0; padding-top: 0; }
+  .assoc-title { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+  .assoc-title b { font-weight: 600; }
+  .assoc-title span { color: #243c9d; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .assoc-title span.na { color: #98a2b3; font-weight: 500; }
+  .assoc-row > small { display: block; margin-top: 4px; line-height: 1.45; }
+  .glucose-note { border-left: 3px solid #4263eb; background: #eef2ff; margin: 8px 0 0; padding: 9px 10px; line-height: 1.45; }
+  .glucose-secondary-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(290px, 0.9fr); gap: 15px; margin-top: 15px; }
+  .glucose-secondary-grid.single { grid-template-columns: 1fr; }
+  .glucose-secondary-grid.single .meal-context { max-width: 560px; }
+  .glucose-secondary-grid.single .chart-wrap { max-width: 880px; }
+  .meal-context { display: grid; gap: 0; }
+  .meal-context div { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: baseline; padding: 9px 0; border-top: 1px solid #e5e9f0; font-size: 13px; }
+  .meal-context div:first-child { border-top: 0; }
+  .meal-context span { color: #667085; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .meal-context b { font-variant-numeric: tabular-nums; }
+
+  .tip {
+    position: fixed; pointer-events: none; z-index: 10; background: white; border: 1px solid #d8deea;
+    border-radius: 8px; box-shadow: 0 8px 20px rgba(32, 47, 72, 0.14); padding: 8px 10px;
+    font-size: 12px; color: #23314a; line-height: 1.5; display: none; max-width: 260px;
+  }
+  .tip b { font-weight: 650; }
+  .tip small { display: block; font-size: 11px; }
+
+  /* print layout (PDF): single column, controls replaced by plain text */
+  main.print-layout { max-width: 718px; width: 718px; padding-left: 0; padding-right: 0; }
+  .print-layout .grid, .print-layout .glucose-overview-grid, .print-layout .glucose-secondary-grid { grid-template-columns: 1fr; }
+  .print-layout .cards.cards-6 { gap: 8px; }
+  .print-layout .card { padding: 10px; }
+  .print-layout .card strong { font-size: 18px; }
+  .print-layout .glucose-summary-card { grid-template-columns: 200px minmax(0, 1fr); gap: 16px; padding: 14px; }
+  .print-layout .glucose-headline strong { font-size: 36px; }
+  .print-layout .glucose-range-control, .print-layout .timeline-hint { display: none; }
+  .print-layout .glucose-range-print { display: block; }
+
+  @media (max-width: 1000px) {
+    .cards.cards-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .glucose-summary-card, .glucose-overview-grid, .glucose-secondary-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 800px) {
+    .cards.cards-6 { grid-template-columns: 1fr 1fr; }
+    .glucose-section-heading { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<main id="main">
+  <div class="proto-bar" role="group" aria-label="Prototype controls">
+    <b>Prototype</b>
+    <span>Glucose data
+      <span class="seg" data-control="mode">
+        <button data-value="cgm" aria-pressed="true">CGM (dense)</button>
+        <button data-value="fingerstick" aria-pressed="false">Fingerstick</button>
+        <button data-value="none" aria-pressed="false">No glucose</button>
+      </span>
+    </span>
+    <span>Layout
+      <span class="seg" data-control="layout">
+        <button data-value="viewer" aria-pressed="true">Viewer</button>
+        <button data-value="print" aria-pressed="false">PDF (718 px)</button>
+      </span>
+    </span>
+    <a href="glucose-detailed.html">Detailed measurements prototype</a>
+  </div>
+
+  <header><div class="brand">AHDREPORT</div><small>Report period 20 Aug – 18 Sep 2026</small></header>
+  <div class="unchanged">Report period controls and patient details (unchanged)</div>
+
+  <section class="overview-card-section">
+    <p class="cards-period">Last 30 days</p>
+    <div class="cards" id="overview-cards"></div>
+  </section>
+  <div class="unchanged">Last year / All time overview disclosures (gain the same glucose card) · Symptoms section (unchanged)</div>
+
+  <section class="glucose-group" id="glucose" aria-labelledby="glucose-heading"></section>
+  <section class="group" id="vitals"></section>
+  <section class="group" id="activity"></section>
+  <div class="unchanged">Mobility · Nutrition · Medication · Import diagnostics · Detailed measurements</div>
+</main>
+<div class="tip" id="tip" role="status"></div>
+
+<script src="glucose-data.js"></script>
+<script>
+const P = window.GlucoseProto;
+const C = P.colors;
+const state = { mode: "cgm", layout: "viewer", preset: "type2", custom: { low: 4.0, high: 10.0 } };
+const datasets = { cgm: P.build("cgm"), fingerstick: P.build("fingerstick") };
+const tip = document.getElementById("tip");
+const f1 = (v) => (v === undefined ? "—" : v.toFixed(1));
+const pct = (v) => `${Math.round(v * 100)}%`;
+const signed = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
+const dayLabel = (ms) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const timeLabel = (ms) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const range = () => {
+  const p = P.presets.find((x) => x.id === state.preset);
+  return state.preset === "custom" ? { ...p, ...state.custom } : p;
+};
+const rangeText = (r) => `${r.low.toFixed(1)}–${r.high.toFixed(1)} mmol/L`;
+
+function showTip(event, html) {
+  tip.innerHTML = html;
+  tip.style.display = "block";
+  const pad = 14;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = event.clientX + pad, y = event.clientY + pad;
+  if (x + w > innerWidth - 8) x = event.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = event.clientY - h - pad;
+  tip.style.left = `${x}px`;
+  tip.style.top = `${y}px`;
+}
+const hideTip = () => { tip.style.display = "none"; };
+
+// ---------- overview cards ----------
+function renderOverview(ds, s, r) {
+  const base = [
+    ["Weight", "86.4 kg", "Δ −1.2 kg"],
+    ["Heart rate", "72 bpm", "Median · Sustained min 54 · max 131"],
+    ["Steps", "7,480", "Median · Min 1,204 · Max 14,880"],
+    ["Sleep", "6.8 hr", "Median · Min 5.3 · Max 8.2"],
+    ["Dietary energy", "1,940 kcal", "Median · Min 1,310 · Max 2,720"],
+  ];
+  const el = document.getElementById("overview-cards");
+  const cards = base.map(([a, b, c]) => `<article class="card"><span>${a}</span><strong>${b}</strong><small>${c}</small></article>`);
+  if (ds) {
+    const share = s.dense ? `${pct(s.split.within)} of time in ${r.low.toFixed(1)}–${r.high.toFixed(1)}` : `${pct(s.split.within)} of readings in ${r.low.toFixed(1)}–${r.high.toFixed(1)}`;
+    cards.push(`<article class="card"><span>Blood glucose <span class="new-tag">New</span></span><strong>${f1(s.median)} mmol/L</strong><small>Median · ${share}</small></article>`);
+  }
+  el.className = ds ? "cards cards-6" : "cards";
+  el.innerHTML = cards.join("");
+}
+
+// ---------- summary card chart ----------
+function dailyChart(ds, r) {
+  const days = P.daily(ds, r).slice().reverse();
+  const W = 760, H = 220, L = 34, R = 10, T = 10, B = 24;
+  const yMax = Math.max(14, Math.ceil((Math.max(...days.map((d) => d.max)) + 1) / 2) * 2);
+  const nDays = Math.round((ds.to - ds.from) / (24 * P.HOUR));
+  const dayIndex = (date) => Math.round((new Date(`${date}T12:00:00`).getTime() - ds.from) / (24 * P.HOUR));
+  const x = (i) => L + ((i + 0.5) / nDays) * (W - L - R);
+  const y = (v) => T + (1 - v / yMax) * (H - T - B);
+  let g = "";
+  for (let v = 0; v <= yMax; v += 2)
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#eef1f6"/><text x="${L - 7}" y="${y(v) + 3.5}" font-size="10" fill="#8a94a6" text-anchor="end">${v}</text>`;
+  g += `<rect x="${L}" y="${y(r.high)}" width="${W - L - R}" height="${y(r.low) - y(r.high)}" fill="${C.band}"/>`;
+  for (let i = 0; i < nDays; i += 4)
+    g += `<text x="${x(i)}" y="${H - 6}" font-size="10" fill="#8a94a6" text-anchor="middle">${dayLabel(ds.from + i * 24 * P.HOUR + 12 * P.HOUR)}</text>`;
+  g += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#cfd6e3"/>`;
+  // whiskers: daily min-max, like RangeMetricChart
+  days.forEach((d) => {
+    const i = dayIndex(d.date);
+    g += `<line x1="${x(i)}" x2="${x(i)}" y1="${y(d.max)}" y2="${y(d.min)}" stroke="${C.line}" stroke-opacity=".28" stroke-width="5" stroke-linecap="round"/>`;
+  });
+  // median line, broken across missing days
+  let path = "", prev = -2;
+  days.forEach((d) => {
+    const i = dayIndex(d.date);
+    path += `${i === prev + 1 ? "L" : "M"}${x(i).toFixed(1)},${y(d.median).toFixed(1)}`;
+    prev = i;
+  });
+  g += `<path d="${path}" fill="none" stroke="${C.line}" stroke-width="2"/>`;
+  days.forEach((d) => {
+    const i = dayIndex(d.date);
+    g += `<circle cx="${x(i)}" cy="${y(d.median)}" r="4" fill="${C.line}" stroke="white" stroke-width="2"/>`;
+  });
+  g += `<line class="xhair" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="#23314a" stroke-dasharray="3 3" opacity="0"/>`;
+  g += `<rect class="hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/>`;
+  return {
+    svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily glucose range and median over the selected period">${g}</svg>`,
+    bind(wrap) {
+      const svg = wrap.querySelector("svg");
+      const hit = svg.querySelector(".hit"), xh = svg.querySelector(".xhair");
+      hit.addEventListener("mousemove", (e) => {
+        const box = svg.getBoundingClientRect();
+        const sx = ((e.clientX - box.left) / box.width) * W;
+        const i = Math.max(0, Math.min(nDays - 1, Math.floor(((sx - L) / (W - L - R)) * nDays)));
+        const d = days.find((dd) => dayIndex(dd.date) === i);
+        xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("opacity", ".5");
+        const label = dayLabel(ds.from + i * 24 * P.HOUR + 12 * P.HOUR);
+        showTip(e, d
+          ? `<b>${label}</b><br>Median ${f1(d.median)} mmol/L<br>Range ${f1(d.min)}–${f1(d.max)}<small>${d.count} readings · ${d.counts.within} within, ${d.counts.below} below, ${d.counts.above} above</small>`
+          : `<b>${label}</b><small>No glucose readings</small>`);
+      });
+      hit.addEventListener("mouseleave", () => { xh.setAttribute("opacity", "0"); hideTip(); });
+    },
+  };
+}
+
+function rangeSplit(s) {
+  const segs = [["below", "Below"], ["within", "Within"], ["above", "Above"]];
+  const bar = segs.filter(([k]) => s.split[k] > 0).map(([k]) => `<i style="flex:${s.split[k]};background:${C[k]}" title="${k} ${pct(s.split[k])}"></i>`).join("");
+  const legend = segs.map(([k, l]) => `<span style="--c:${C[k]}">${l} <b>${pct(s.split[k])}</b></span>`).join("");
+  return `<div class="range-split"><div class="range-split-bar" aria-hidden="true">${bar}</div><div class="range-split-legend">${legend}</div></div>`;
+}
+
+// ---------- timeline with context lanes ----------
+function timeline(ds, r) {
+  const W = 760, L = 92, R = 8, plotH = 170, laneH = 30, T = 6;
+  const lanes = ["Carbohydrates", "Insulin", "Activity", "Sleep"];
+  const H = T + plotH + 22 + lanes.length * laneH + 4;
+  const yMax = 14;
+  const x = (t) => L + ((t - ds.from) / (ds.to - ds.from)) * (W - L - R);
+  const y = (v) => T + (1 - Math.min(v, yMax) / yMax) * plotH;
+  const colorOf = (v) => (v < r.low ? C.below : v > r.high ? C.above : C.line);
+  let g = "";
+  for (let v = 0; v <= yMax; v += 2)
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#eef1f6"/><text x="${L - 7}" y="${y(v) + 3.5}" font-size="10" fill="#8a94a6" text-anchor="end">${v}</text>`;
+  g += `<text x="10" y="${T + plotH / 2}" font-size="11" fill="#536176">mmol/L</text>`;
+  g += `<rect x="${L}" y="${y(r.high)}" width="${W - L - R}" height="${y(r.low) - y(r.high)}" fill="${C.band}"/>`;
+  // points: all readings for fingerstick, hourly medians for CGM
+  let pts;
+  if (ds.mode === "cgm") {
+    const hours = new Map();
+    ds.readings.forEach((p) => {
+      const k = Math.floor(p.t / P.HOUR);
+      if (!hours.has(k)) hours.set(k, []);
+      hours.get(k).push(p.v);
+    });
+    pts = [...hours].map(([k, vs]) => ({ t: k * P.HOUR + P.HOUR / 2, v: P.median(vs) }));
+  } else pts = ds.readings;
+  if (ds.mode === "cgm") {
+    // Continuous: connected hourly medians, broken at gaps > 2 h; out-of-range hours marked.
+    let path = "", prev = -Infinity;
+    pts.forEach((p) => {
+      path += `${p.t - prev > 2 * P.HOUR ? "M" : "L"}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`;
+      prev = p.t;
+    });
+    g += `<path d="${path}" fill="none" stroke="${C.line}" stroke-width="1.2" stroke-opacity=".85"/>`;
+    pts.filter((p) => p.v < r.low || p.v > r.high).forEach((p) => {
+      g += `<circle cx="${x(p.t).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="2.2" fill="${colorOf(p.v)}"/>`;
+    });
+  } else {
+    pts.forEach((p) => {
+      g += `<circle cx="${x(p.t).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.4" fill="${colorOf(p.v)}" stroke="white" stroke-width="1"/>`;
+    });
+  }
+  const days = Math.round((ds.to - ds.from) / (24 * P.HOUR));
+  for (let i = 0; i <= days; i += 4) {
+    const t = ds.from + i * 24 * P.HOUR;
+    g += `<text x="${x(t)}" y="${T + plotH + 15}" font-size="10" fill="#8a94a6" text-anchor="middle">${dayLabel(t)}</text>`;
+  }
+  const laneTop = (k) => T + plotH + 22 + k * laneH;
+  lanes.forEach((name, k) => {
+    g += `<line x1="${L}" x2="${W - R}" y1="${laneTop(k)}" y2="${laneTop(k)}" stroke="#e5e9f0"/>`;
+    g += `<text x="0" y="${laneTop(k) + laneH / 2 + 4}" font-size="11" fill="#23314a">${name}</text>`;
+  });
+  g += `<line x1="${L}" x2="${W - R}" y1="${laneTop(lanes.length)}" y2="${laneTop(lanes.length)}" stroke="#e5e9f0"/>`;
+  // carbs: tick height by grams; label the 3 largest
+  // Direct labels: keep the most extreme events, skipping any within 60 units of a kept one.
+  const spaced = (events, at) => events.reduce((kept, e) => (kept.every((k) => Math.abs(at(k) - at(e)) > 60) ? [...kept, e] : kept), []);
+  const topCarbs = spaced([...ds.carbs].sort((a, b) => b.g - a.g), (c) => x(c.t)).slice(0, 3);
+  ds.carbs.forEach((c) => {
+    const h = 5 + (c.g / 95) * 17, base = laneTop(0) + laneH - 4;
+    g += `<rect x="${x(c.t) - 1.25}" y="${base - h}" width="2.5" height="${h}" rx="1.25" fill="${C.carbs}"/>`;
+  });
+  topCarbs.forEach((c) => { g += `<text x="${x(c.t)}" y="${laneTop(0) + 7}" font-size="9" font-weight="700" fill="#23314a" text-anchor="middle">${c.g} g</text>`; });
+  // insulin: bolus solid, basal hollow short
+  ds.insulin.forEach((u) => {
+    const base = laneTop(1) + laneH - 4;
+    if (u.reason === "bolus") g += `<rect x="${x(u.t) - 1.5}" y="${base - 16}" width="3" height="16" rx="1.5" fill="${C.insulin}"/>`;
+    else g += `<rect x="${x(u.t) - 1.5}" y="${base - 8}" width="3" height="8" rx="1.5" fill="none" stroke="${C.insulin}" stroke-width="1"/>`;
+  });
+  // activity: width by duration
+  const longest = [...ds.activity].sort((a, b) => b.minutes - a.minutes)[0];
+  ds.activity.forEach((a) => {
+    const w = Math.max(3, x(a.start + a.minutes * P.MIN) - x(a.start));
+    g += `<rect x="${x(a.start)}" y="${laneTop(2) + 13}" width="${w}" height="8" rx="3" fill="${C.activity}"/>`;
+  });
+  if (longest) g += `<text x="${x(longest.start)}" y="${laneTop(2) + 10}" font-size="9" font-weight="700" fill="#23314a" text-anchor="middle">${longest.minutes} min</text>`;
+  // sleep: interval bars; label shortest and longest
+  const sorted = [...ds.sleep].sort((a, b) => a.hours - b.hours);
+  ds.sleep.forEach((s) => {
+    g += `<rect x="${x(s.start)}" y="${laneTop(3) + 13}" width="${Math.max(3, x(s.end) - x(s.start))}" height="8" rx="3" fill="${C.sleep}" fill-opacity=".8"/>`;
+  });
+  spaced([sorted[0], sorted.at(-1)], (s) => x(s.start)).forEach((s) => { g += `<text x="${(x(s.start) + x(s.end)) / 2}" y="${laneTop(3) + 10}" font-size="9" font-weight="700" fill="#23314a" text-anchor="middle">${s.hours.toFixed(1)} h</text>`; });
+  g += `<line class="xhair" x1="0" x2="0" y1="${T}" y2="${laneTop(lanes.length)}" stroke="#23314a" stroke-dasharray="3 3" opacity="0"/>`;
+  g += `<rect class="hit" x="${L}" y="${T}" width="${W - L - R}" height="${laneTop(lanes.length) - T}" fill="transparent"/>`;
+  return {
+    svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Glucose readings with carbohydrate, insulin, activity and sleep lanes">${g}</svg>`,
+    bind(wrap) {
+      const svg = wrap.querySelector("svg");
+      const hit = svg.querySelector(".hit"), xh = svg.querySelector(".xhair");
+      hit.addEventListener("mousemove", (e) => {
+        const box = svg.getBoundingClientRect();
+        const sx = ((e.clientX - box.left) / box.width) * W;
+        const t = ds.from + ((sx - L) / (W - L - R)) * (ds.to - ds.from);
+        const near = pts.reduce((best, p) => (Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best), pts[0]);
+        const win = 90 * P.MIN;
+        const c = ds.carbs.filter((q) => Math.abs(q.t - near.t) < win);
+        const u = ds.insulin.filter((q) => Math.abs(q.t - near.t) < win);
+        const a = ds.activity.filter((q) => Math.abs(q.start - near.t) < win);
+        xh.setAttribute("x1", x(near.t)); xh.setAttribute("x2", x(near.t)); xh.setAttribute("opacity", ".5");
+        const cls = P.classify(near.v, r);
+        showTip(e, `<b>${dayLabel(near.t)} ${timeLabel(near.t)}</b><br>${f1(near.v)} mmol/L ${ds.mode === "cgm" ? "(hourly median)" : ""}<small>${cls === "within" ? "Within target" : cls === "below" ? "Below target" : "Above target"}</small>` +
+          (c.length ? `<small>Carbohydrates ${c.map((q) => `${q.g} g at ${timeLabel(q.t)}`).join(", ")}</small>` : "") +
+          (u.length ? `<small>Insulin ${u.map((q) => `${q.iu} IU ${q.reason} at ${timeLabel(q.t)}`).join(", ")}</small>` : "") +
+          (a.length ? `<small>Activity ${a.map((q) => `${q.minutes} min at ${timeLabel(q.start)}`).join(", ")}</small>` : ""));
+      });
+      hit.addEventListener("mouseleave", () => { xh.setAttribute("opacity", "0"); hideTip(); });
+    },
+  };
+}
+
+// ---------- AGP-style daily pattern (CGM only) ----------
+function dailyPattern(ds, r) {
+  const prof = P.profile(ds);
+  const W = 760, H = 220, L = 34, R = 10, T = 10, B = 24, yMax = 16;
+  const x = (h) => L + (h / 23) * (W - L - R);
+  const y = (v) => T + (1 - v / yMax) * (H - T - B);
+  const area = (lo, hi) => `M${prof.map((p) => `${x(p.h)},${y(p[hi])}`).join("L")}L${prof.slice().reverse().map((p) => `${x(p.h)},${y(p[lo])}`).join("L")}Z`;
+  let g = "";
+  for (let v = 0; v <= yMax; v += 4)
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#eef1f6"/><text x="${L - 7}" y="${y(v) + 3.5}" font-size="10" fill="#8a94a6" text-anchor="end">${v}</text>`;
+  g += `<rect x="${L}" y="${y(r.high)}" width="${W - L - R}" height="${y(r.low) - y(r.high)}" fill="${C.band}"/>`;
+  g += `<path d="${area("p5", "p95")}" fill="${C.line}" fill-opacity=".1"/>`;
+  g += `<path d="${area("p25", "p75")}" fill="${C.line}" fill-opacity=".24"/>`;
+  g += `<path d="M${prof.map((p) => `${x(p.h)},${y(p.p50)}`).join("L")}" fill="none" stroke="${C.line}" stroke-width="2"/>`;
+  [0, 3, 6, 9, 12, 15, 18, 21].forEach((h) => { g += `<text x="${x(h)}" y="${H - 6}" font-size="10" fill="#8a94a6" text-anchor="middle">${String(h).padStart(2, "0")}:00</text>`; });
+  const peak = prof.reduce((a, b) => (b.p50 > a.p50 ? b : a));
+  g += `<text x="${x(peak.h)}" y="${y(peak.p95) - 6}" font-size="9" font-weight="700" fill="#23314a" text-anchor="middle">median peak ${f1(peak.p50)} at ${String(peak.h).padStart(2, "0")}:00</text>`;
+  g += `<rect class="hit" x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}" fill="transparent"/>`;
+  return {
+    svg: `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Glucose percentiles by hour of day">${g}</svg>`,
+    bind(wrap) {
+      const svg = wrap.querySelector("svg");
+      svg.querySelector(".hit").addEventListener("mousemove", (e) => {
+        const box = svg.getBoundingClientRect();
+        const h = Math.max(0, Math.min(23, Math.round((((e.clientX - box.left) / box.width) * W - L) / (W - L - R) * 23)));
+        const p = prof[h];
+        showTip(e, `<b>${String(h).padStart(2, "0")}:00–${String(h).padStart(2, "0")}:59</b><br>Median ${f1(p.p50)} mmol/L<small>Middle half ${f1(p.p25)}–${f1(p.p75)} · 5–95% ${f1(p.p5)}–${f1(p.p95)}</small>`);
+      });
+      svg.querySelector(".hit").addEventListener("mouseleave", hideTip);
+    },
+  };
+}
+
+// ---------- glucose section ----------
+function renderGlucose() {
+  const el = document.getElementById("glucose");
+  const r = range();
+  if (state.mode === "none") {
+    renderOverview(null);
+    el.innerHTML = "";
+    return;
+  }
+  const ds = datasets[state.mode];
+  const s = P.summarize(ds, r);
+  const a = P.associations(ds);
+  renderOverview(ds, s, r);
+  const presetOptions = P.presets.map((p) => `<option value="${p.id}"${p.id === state.preset ? " selected" : ""}>${p.label}${p.id === "custom" ? "" : ` · ${p.low.toFixed(1)}–${p.high.toFixed(1)}`}</option>`).join("");
+  const custom = state.preset === "custom"
+    ? `<input type="number" step="0.1" min="2" max="8" value="${r.low}" aria-label="Lower target (mmol/L)" data-custom="low"> – <input type="number" step="0.1" min="5" max="20" value="${r.high}" aria-label="Upper target (mmol/L)" data-custom="high"> mmol/L`
+    : "";
+  const stats = s.dense
+    ? `<div><dt>Time in range</dt><dd>${pct(s.split.within)}</dd></div>
+       <div><dt>GMI <small>(estimated A1c)</small></dt><dd>${s.gmi.toFixed(1)}%<small>${Math.round((s.gmi - 2.152) / 0.09148)} mmol/mol</small></dd></div>
+       <div><dt>Variability (CV)</dt><dd>${Math.round(s.cv)}%</dd></div>`
+    : `<div><dt>Readings in range</dt><dd>${pct(s.split.within)}</dd></div>
+       <div><dt>Variability (SD)</dt><dd>${f1(s.sd)} mmol/L</dd></div>`;
+  const splitCaption = s.dense
+    ? "Share of time, weighted by continuous readings."
+    : "Share of recorded readings, not time in range.";
+  const chip = s.dense
+    ? `<span class="density-chip dense">Continuous data · ${pct(s.coverage)} coverage</span>`
+    : `<span class="density-chip sparse">Spot readings · time-based metrics need ≥14 days and ≥70% coverage</span>`;
+  const assoc = (title, v, detail, fallback) => `
+    <div class="assoc-row"><div class="assoc-title"><b>${title}</b>${v === undefined ? `<span class="na">—</span>` : `<span>${signed(v)} mmol/L</span>`}</div>
+    <small>${v === undefined ? fallback : detail}</small></div>`;
+  const meal = s.meal;
+  const tagged = meal.beforeMeal.length + meal.afterMeal.length > 0;
+  const mealPanel = tagged ? `
+    <article class="panel">
+      <div class="glucose-panel-heading"><h3>Meal context</h3><small>From the meal-time tag the logging app stored with each reading.</small></div>
+      <div class="meal-context">
+        <div><b>Before meal</b><span>${meal.beforeMeal.length} readings</span><b>${f1(P.median(meal.beforeMeal))} mmol/L</b></div>
+        <div><b>After meal</b><span>${meal.afterMeal.length} readings</span><b>${f1(P.median(meal.afterMeal))} mmol/L</b></div>
+        <div><b>Not tagged</b><span>${meal.unspecified.length} readings</span><b>${f1(P.median(meal.unspecified))} mmol/L</b></div>
+      </div>
+      <p class="glucose-note">Medians per tag. Readings without a tag are not guessed from nearby meals.</p>
+    </article>` : "";
+  const patternPanel = s.dense ? `
+    <article class="panel">
+      <div class="glucose-panel-heading"><h3>Typical day</h3><small>All ${s.daysWithReadings} days overlaid by hour: median line, middle 50% and 5–95% bands.</small></div>
+      <div class="chart-wrap" data-chart="pattern"></div>
+    </article>` : "";
+
+  el.innerHTML = `
+    <div class="glucose-section-heading">
+      <div>
+        <p class="eyebrow">Metabolic</p>
+        <h2 id="glucose-heading">Blood glucose</h2>
+        <p class="glucose-section-copy">Readings against a target range, with meals, insulin, activity and sleep for context.</p>
+      </div>
+      <div class="glucose-range-control">
+        <label for="preset">Target range</label>
+        <select id="preset">${presetOptions}</select>
+        ${custom}
+      </div>
+      <p class="glucose-range-print">Target range: ${r.label}, ${rangeText(r)}</p>
+    </div>
+
+    <article class="card glucose-summary-card">
+      <div class="glucose-headline">
+        <span>Latest reading</span>
+        <strong>${f1(s.latest.v)}<em>mmol/L</em></strong>
+        <small>${new Date(s.latest.t).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} at ${timeLabel(s.latest.t)}</small>
+        <dl class="glucose-stats">
+          <div><dt>Median</dt><dd>${f1(s.median)} mmol/L</dd></div>
+          ${stats}
+        </dl>
+      </div>
+      <div>
+        <div class="glucose-chart-title"><b>Daily range and median</b><span>Target ${rangeText(r)}</span></div>
+        <div class="chart-wrap" data-chart="daily"></div>
+        ${rangeSplit(s)}
+        <small>${splitCaption}</small>
+      </div>
+      <div class="glucose-card-footer">
+        <span>${s.count.toLocaleString("en-GB")} readings · ${s.daysWithReadings} of ${s.windowDays} days</span>
+        ${chip}
+      </div>
+    </article>
+
+    <div class="glucose-overview-grid">
+      <article class="panel">
+        <div class="glucose-panel-heading"><h3>Glucose and context</h3><small class="timeline-hint">${ds.mode === "cgm" ? "Continuous readings shown as hourly medians. " : ""}Hover to see what was logged around a reading.</small></div>
+        <div class="chart-wrap" data-chart="timeline"></div>
+        <div class="timeline-legend">
+          <span style="--c:${C.below}">Below target</span><span style="--c:${C.line}">Within target</span><span style="--c:${C.above}">Above target</span>
+          <span style="--c:${C.insulin}">Insulin: solid bolus, outlined basal</span>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="glucose-panel-heading"><h3>Observed associations</h3><small>Readings paired with nearby events in this period.</small></div>
+        ${assoc("After logged carbohydrates", a.carbs.value, `Median rise to the highest reading within 2 h · ${a.carbs.n} paired meals`, `Not enough paired meals for a comparison (${a.carbs.n} of 5)`)}
+        ${assoc("After logged activity", a.activity.value, `Median change about 2 h after starting · ${a.activity.n} sessions`, `Not enough paired sessions for a comparison (${a.activity.n} of 5)`)}
+        ${assoc("After shorter nights", a.sleep.value, `First morning reading after nights under ${a.sleep.splitAt.toFixed(1)} h, compared with longer nights · ${a.sleep.n} and ${a.sleep.m} nights`, "Not enough mornings with a reading for a comparison")}
+        <p class="glucose-note">Descriptive comparison only. It does not establish cause, and it is not guidance on medication or insulin doses.</p>
+      </article>
+    </div>
+    ${patternPanel || mealPanel ? `<div class="glucose-secondary-grid${patternPanel && mealPanel ? "" : " single"}">${patternPanel}${mealPanel}</div>` : ""}
+  `;
+  const mount = (name, chart) => {
+    const wrap = el.querySelector(`[data-chart="${name}"]`);
+    if (!wrap) return;
+    wrap.innerHTML = chart.svg;
+    chart.bind(wrap);
+  };
+  mount("daily", dailyChart(ds, r));
+  mount("timeline", timeline(ds, r));
+  if (s.dense) mount("pattern", dailyPattern(ds, r));
+  el.querySelector("#preset").addEventListener("change", (e) => { state.preset = e.target.value; renderGlucose(); });
+  el.querySelectorAll("[data-custom]").forEach((input) =>
+    input.addEventListener("change", (e) => {
+      const v = Number(e.target.value);
+      if (Number.isFinite(v)) state.custom[e.target.dataset.custom] = v;
+      if (state.custom.low >= state.custom.high) state.custom.high = state.custom.low + 0.1;
+      renderGlucose();
+    }),
+  );
+}
+
+// ---------- new vitals panels (MetricChart look-alike) ----------
+function areaChart(series) {
+  const W = 600, H = 170, L = 38, R = 10, T = 10, B = 24;
+  const vs = series.data.map((d) => d.v);
+  const lo = Math.min(...vs), hi = Math.max(...vs), pad = (hi - lo || 1) * 0.3;
+  const y0 = lo - pad, y1 = hi + pad;
+  const t0 = series.data[0].t, t1 = series.data.at(-1).t || t0 + 1;
+  const x = (t) => L + ((t - t0) / (t1 - t0 || 1)) * (W - L - R);
+  const y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  let g = "";
+  for (let k = 0; k <= 3; k++) {
+    const v = y0 + ((y1 - y0) * k) / 3;
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#eef1f6"/><text x="${L - 6}" y="${y(v) + 3.5}" font-size="10" fill="#8a94a6" text-anchor="end">${v.toFixed(series.decimals)}</text>`;
+  }
+  const line = series.data.map((d, i) => `${i ? "L" : "M"}${x(d.t).toFixed(1)},${y(d.v).toFixed(1)}`).join("");
+  g += `<path d="${line}L${x(series.data.at(-1).t)},${H - B}L${x(t0)},${H - B}Z" fill="${series.color}" fill-opacity=".12"/>`;
+  g += `<path d="${line}" fill="none" stroke="${series.color}" stroke-width="2"/>`;
+  if (series.data.length < 12) series.data.forEach((d) => { g += `<circle cx="${x(d.t)}" cy="${y(d.v)}" r="4" fill="${series.color}" stroke="white" stroke-width="2"/>`; });
+  [t0, (t0 + t1) / 2, t1].forEach((t, k) => { g += `<text x="${x(t)}" y="${H - 6}" font-size="10" fill="#8a94a6" text-anchor="${["start", "middle", "end"][k]}">${dayLabel(t)}</text>`; });
+  return `<div class="chart-wrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${series.label} trend">${g}</svg></div>`;
+}
+function renderGroups() {
+  const v = P.vitals();
+  const existing = (name) => `<article class="panel"><h3>${name}</h3><div class="unchanged" style="margin:8px 0 0">Existing chart (unchanged)</div></article>`;
+  const panel = (key) => `<article class="panel"><h3>${v[key].label}<span class="new-tag">New</span></h3><small>${v[key].unit || "index"} · ${v[key].data.length} readings</small>${areaChart(v[key])}</article>`;
+  document.getElementById("vitals").innerHTML = `
+    <h2>Vitals</h2>
+    <div class="grid">
+      ${existing("Blood pressure")}${existing("Pulse pressure")}${existing("Weight")}${existing("Heart rate")}
+      ${panel("bodyMassIndex")}${panel("bodyFatPercentage")}${panel("waistCircumference")}
+      ${existing("Resting heart rate")}${panel("heartRateVariability")}${panel("oxygenSaturation")}${panel("respiratoryRate")}${existing("Body temperature")}
+    </div>`;
+  document.getElementById("activity").innerHTML = `
+    <h2>Sleep &amp; activity</h2>
+    <div class="grid">
+      ${existing("Sleep")}${existing("Steps")}${existing("Active energy · Exercise time · Distance")}
+      ${panel("vo2Max")}${panel("walkingHeartRateAverage")}
+    </div>`;
+}
+
+document.querySelectorAll(".proto-bar [data-control]").forEach((group) =>
+  group.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    group.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    state[group.dataset.control] = b.dataset.value;
+    document.getElementById("main").classList.toggle("print-layout", state.layout === "print");
+    renderGlucose();
+  }),
+);
+renderGlucose();
+renderGroups();
+</script>
+</body>
+</html>

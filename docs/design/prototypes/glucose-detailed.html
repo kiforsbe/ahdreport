@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glucose detail prototype</title>
+<link rel="stylesheet" href="app-base.css" />
+<style>
+  .proto-bar {
+    display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+    border: 1px dashed #b6c2d9; border-radius: 10px; padding: 10px 14px;
+    margin-bottom: 22px; font-size: 12px; color: #536176; background: #fbfcfe;
+  }
+  .proto-bar b { color: #23314a; }
+  .proto-bar .seg { display: inline-flex; gap: 4px; }
+  .proto-bar button { padding: 5px 10px; font-size: 12px; }
+  .proto-bar button[aria-pressed="true"] { background: #e8edff; border-color: #4263eb; color: #243c9d; font-weight: 600; }
+  .unchanged { border: 1px dashed #d8deea; border-radius: 10px; color: #98a2b3; font-size: 12px; padding: 10px 14px; margin: 18px 0; }
+  .new-tag { background: #e8edff; border-radius: 999px; color: #243c9d; font-size: 10px; font-weight: 700; margin-left: 8px; padding: 2px 7px; vertical-align: 2px; }
+
+  /* proposed */
+  .glucose-report-section table { table-layout: auto; }
+  .glucose-report-section td { vertical-align: middle; }
+  .th-sub { display: block; font-weight: 400; font-size: 10px; color: #8a94a6; margin-top: 2px; }
+  .split-cell { min-width: 108px; }
+  .split-cell .bar { display: flex; gap: 2px; height: 8px; width: 104px; }
+  .split-cell .bar i { display: block; border-radius: 3px; min-width: 3px; }
+  .split-cell small { display: block; margin-top: 4px; font-size: 11px; color: #536176; font-variant-numeric: tabular-nums; }
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .num small { font-size: 11px; }
+  .trace-axis { display: flex; justify-content: space-between; width: 240px; font-size: 9px; font-weight: 400; color: #8a94a6; margin-top: 3px; }
+  .table-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 11px; color: #667085; margin-top: 9px; }
+  .table-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--c); margin-right: 5px; vertical-align: -1px; }
+  .table-legend span.hollow::before { background: none; border: 1px solid var(--c); }
+
+  main.print-layout { max-width: 718px; width: 718px; padding-left: 0; padding-right: 0; }
+  .print-layout table { font-size: 9px; }
+  .print-layout .report-section h3 { font-size: 12px; }
+  .print-layout .meal-col { display: none; }
+  .print-layout .trace-axis { width: 190px; }
+  @media (max-width: 800px) { .glucose-report-section { overflow-x: auto; } }
+</style>
+</head>
+<body>
+<main id="main">
+  <div class="proto-bar" role="group" aria-label="Prototype controls">
+    <b>Prototype</b>
+    <span>Glucose data
+      <span class="seg" data-control="mode">
+        <button data-value="cgm" aria-pressed="false">CGM (dense)</button>
+        <button data-value="fingerstick" aria-pressed="true">Fingerstick</button>
+      </span>
+    </span>
+    <span>Layout
+      <span class="seg" data-control="layout">
+        <button data-value="viewer" aria-pressed="true">Viewer</button>
+        <button data-value="print" aria-pressed="false">PDF (718 px)</button>
+      </span>
+    </span>
+    <a href="glucose-summary.html">Summary prototype</a>
+  </div>
+
+  <section class="print-report">
+    <h2>Detailed measurements</h2>
+    <p>Report period: 2026-08-20 — 2026-09-18. Each table below lists up to 365 of the most recent days with data per metric (90 in the PDF).</p>
+    <div class="unchanged">Symptoms table (unchanged)</div>
+    <div id="glucose-table"></div>
+    <div class="unchanged">Vitals · Activity · Walking · Nutrition tables (unchanged)</div>
+    <div id="generic-tables"></div>
+  </section>
+</main>
+
+<script src="glucose-data.js"></script>
+<script>
+const P = window.GlucoseProto;
+const C = P.colors;
+const state = { mode: "fingerstick", layout: "viewer" };
+const datasets = { cgm: P.build("cgm"), fingerstick: P.build("fingerstick") };
+const range = P.presets[0];
+const f1 = (v) => (v === undefined ? "—" : v.toFixed(1));
+const formatDate = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+// Port of DailyDistribution.tsx + a target band behind the marks (glucose only).
+function distribution(d, colMin, colMax, color, band) {
+  const x = (v) => 8 + ((v - colMin) / (colMax - colMin)) * 144;
+  let g = "";
+  if (band) g += `<rect x="${x(band.low)}" y="3" width="${x(band.high) - x(band.low)}" height="20" fill="${C.band}"/>`;
+  for (let v = Math.ceil(colMin / 2) * 2; v <= colMax; v += 2) g += `<line x1="${x(v)}" x2="${x(v)}" y1="1" y2="27" stroke="#e5e9f0"/>`;
+  const avg = `<text x="${x(d.average)}" y="6" font-size="8" font-weight="700" text-anchor="middle" fill="#17213a">${f1(d.average)}</text>`;
+  if (d.count === 1) return `<svg width="195" height="28" viewBox="0 0 195 28" aria-label="Single reading ${f1(d.average)} mmol/L">${g}${avg}<circle cx="${x(d.average)}" cy="12" r="4" fill="${color}"/></svg>`;
+  const s0 = x(Math.max(d.min, d.average - d.sd)), s1 = x(Math.min(d.max, d.average + d.sd));
+  g += `<line x1="${x(d.min)}" x2="${x(d.max)}" y1="12" y2="12" stroke="${color}" stroke-opacity=".55" stroke-width="2"/>`;
+  g += `<rect x="${s0}" y="7" width="${Math.max(2, s1 - s0)}" height="10" rx="5" fill="${color}" fill-opacity=".3"/>`;
+  g += `<line x1="${x(d.min)}" x2="${x(d.min)}" y1="7" y2="17" stroke="${color}" stroke-opacity=".55"/><line x1="${x(d.max)}" x2="${x(d.max)}" y1="7" y2="17" stroke="${color}" stroke-opacity=".55"/>`;
+  g += `<circle cx="${x(d.average)}" cy="12" r="4" fill="${color}"/>${avg}`;
+  g += `<text x="${x(d.average)}" y="24" font-size="7" text-anchor="middle" fill="#94a3b8">σ ${f1(d.sd)}</text>`;
+  g += `<text x="${x(d.min)}" y="27" font-size="8" fill="#667085">${f1(d.min)}</text><text x="${x(d.max)}" y="27" font-size="8" text-anchor="end" fill="#667085">${f1(d.max)}</text>`;
+  return `<svg width="195" height="28" viewBox="0 0 195 28" aria-label="Low ${f1(d.min)}, average ${f1(d.average)}, high ${f1(d.max)} mmol/L">${g}</svg>`;
+}
+
+// Time-of-day trace: x is clock time (unlike DayTrace, which spaces by index).
+function trace(d, width) {
+  const W = width, H = 40, plotH = 28, yMax = 14;
+  const dayStart = new Date(`${d.date}T00:00:00`).getTime();
+  const x = (t) => ((t - dayStart) / (24 * P.HOUR)) * W;
+  const y = (v) => 1 + (1 - Math.min(v, yMax) / yMax) * (plotH - 2);
+  let g = `<rect x="0" y="${y(range.high)}" width="${W}" height="${y(range.low) - y(range.high)}" fill="${C.band}"/>`;
+  [6, 12, 18].forEach((h) => { g += `<line x1="${x(dayStart + h * P.HOUR)}" x2="${x(dayStart + h * P.HOUR)}" y1="0" y2="${plotH}" stroke="#eef1f6"/>`; });
+  g += `<line x1="0" x2="${W}" y1="${plotH}" y2="${plotH}" stroke="#d9dfeb"/>`;
+  const colorOf = (v) => (v < range.low ? C.below : v > range.high ? C.above : C.line);
+  if (d.count > 40) {
+    let path = "", prev = -Infinity;
+    d.readings.slice().sort((a, b) => a.t - b.t).forEach((p) => {
+      path += `${p.t - prev > 20 * P.MIN ? "M" : "L"}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`;
+      prev = p.t;
+    });
+    g += `<path d="${path}" fill="none" stroke="${C.line}" stroke-width="1.5"/>`;
+  } else {
+    const pts = d.readings.slice().sort((a, b) => a.t - b.t);
+    if (pts.length > 1) g += `<polyline points="${pts.map((p) => `${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ")}" fill="none" stroke="${C.line}" stroke-opacity=".45" stroke-width="1"/>`;
+    pts.forEach((p) => { g += `<circle cx="${x(p.t).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="2.6" fill="${colorOf(p.v)}" stroke="white" stroke-width=".8"/>`; });
+  }
+  d.carbs.forEach((c) => { g += `<rect x="${x(c.t) - 1}" y="${plotH + 3}" width="2" height="7" rx="1" fill="${C.carbs}"/>`; });
+  d.insulin.forEach((u) => {
+    g += u.reason === "bolus"
+      ? `<rect x="${x(u.t) - 1}" y="${plotH + 3}" width="2" height="7" rx="1" fill="${C.insulin}"/>`
+      : `<rect x="${x(u.t) - 1.5}" y="${plotH + 4}" width="3" height="5" rx="1" fill="none" stroke="${C.insulin}" stroke-width=".8"/>`;
+  });
+  d.activity.forEach((a) => { g += `<rect x="${x(a.start)}" y="${plotH + 5}" width="${Math.max(3, x(a.start + a.minutes * P.MIN) - x(a.start))}" height="4" rx="2" fill="${C.activity}"/>`; });
+  const low = d.readings.filter((p) => p.v < range.low).length, high = d.readings.filter((p) => p.v > range.high).length;
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-label="Readings across the day: ${low} below and ${high} above target; ${d.carbs.length} carbohydrate, ${d.insulin.length} insulin and ${d.activity.length} activity entries">${g}</svg>`;
+}
+
+function renderGlucoseTable() {
+  const ds = datasets[state.mode];
+  const s = P.summarize(ds, range);
+  const days = P.daily(ds, range).slice(0, 12);
+  const print = state.layout === "print";
+  const traceW = print ? 190 : 240;
+  const colMin = 2, colMax = Math.max(14, Math.ceil(Math.max(...days.map((d) => d.max))));
+  const tagged = ds.readings.some((r) => r.meal);
+  const pct = (n, d) => Math.round((n / d) * 100);
+  const rows = days.map((d) => {
+    const segs = ["below", "within", "above"].filter((k) => d.counts[k]).map((k) => `<i style="flex:${d.counts[k]};background:${C[k]}"></i>`).join("");
+    return `<tr>
+      <td>${formatDate(d.date)}</td>
+      <td>${d.count}</td>
+      <td>${distribution(d, colMin, colMax, C.line, range)}</td>
+      <td class="split-cell"><div class="bar">${segs}</div><small>${pct(d.counts.below, d.count)} / ${pct(d.counts.within, d.count)} / ${pct(d.counts.above, d.count)}%</small></td>
+      ${tagged ? `<td class="num meal-col">${f1(d.beforeMedian)} <small>/</small> ${f1(d.afterMedian)}</td>` : ""}
+      <td>${trace(d, traceW)}</td>
+      <td class="num">${d.basal || d.bolus ? `${d.basal || "—"} <small>/</small> ${d.bolus || "—"}` : "<small>—</small>"}</td>
+    </tr>`;
+  }).join("");
+  const notes = [
+    `Target range: ${range.label}, ${range.low.toFixed(1)}–${range.high.toFixed(1)} mmol/L (chosen in the Blood glucose section).`,
+    s.dense
+      ? `Range columns are shares of readings per day. Continuous data: ${Math.round(s.coverage * 100)}% coverage across ${s.daysWithReadings} days.`
+      : "Range columns are shares of recorded readings, not time in range.",
+    "Showing 12 of 27 days in this prototype.",
+  ];
+  document.getElementById("glucose-table").innerHTML = `
+    <section class="report-section glucose-report-section">
+      <h3>Blood glucose <span class="new-tag">New</span></h3>
+      ${notes.map((n) => `<small class="table-notes">${n}</small>`).join("")}
+      <table>
+        <thead><tr>
+          <th>Date</th>
+          <th>Readings</th>
+          <th>Daily distribution (mmol/L)</th>
+          <th>Below / within / above</th>
+          ${tagged ? `<th class="meal-col">Before / after meal<span class="th-sub">median mmol/L</span></th>` : ""}
+          <th>Across the day<div class="trace-axis"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div></th>
+          <th>Insulin (IU)<span class="th-sub">basal / bolus</span></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="table-legend">
+        <span style="--c:${C.below}">Below target</span><span style="--c:${C.line}">Within target</span><span style="--c:${C.above}">Above target</span>
+        <span style="--c:${C.carbs}">Carbohydrates</span><span style="--c:${C.insulin}">Insulin bolus</span><span class="hollow" style="--c:${C.insulin}">Insulin basal</span><span style="--c:${C.activity}">Activity</span>
+      </div>
+      <small class="table-notes" style="margin-top:6px">Markers appear only when those records exist in the Apple Health export.</small>
+    </section>`;
+}
+
+// Generic ReportTable shape (existing component) for two of the new metrics.
+function renderGeneric() {
+  const v = P.vitals();
+  const table = (key) => {
+    const s = v[key];
+    const byDay = s.data.slice(-6).reverse().map((d, i) => {
+      const vals = [d.v, d.v + (i % 2 ? 1 : -1) * (s.decimals ? 0.4 : 1), d.v + (s.decimals ? 0.7 : 2)];
+      const min = Math.min(...vals), max = Math.max(...vals), avg = vals.reduce((a, b) => a + b) / 3;
+      return { date: P.iso(d.t), min, max, average: avg, sd: (max - min) / 3, count: 3, vals };
+    });
+    const lo = Math.min(...byDay.map((d) => d.min)), hi = Math.max(...byDay.map((d) => d.max)), span = hi - lo || 1;
+    const dayTrace = (vals) => {
+      const l = Math.min(...vals), h = Math.max(...vals), r = h - l || 1;
+      return `<svg width="100" height="26" viewBox="0 0 100 26"><line x1="0" y1="24" x2="100" y2="24" stroke="#d9dfeb"/><polyline points="${vals.map((x, i) => `${(i / (vals.length - 1)) * 100},${24 - ((x - l) / r) * 20}`).join(" ")}" fill="none" stroke="${s.color}" stroke-width="2"/></svg>`;
+    };
+    return `<section class="report-section">
+      <h3>${s.label} <span class="new-tag">New</span></h3>
+      <table><thead><tr><th>Date</th><th>Daily distribution${s.unit ? ` (${s.unit})` : ""}</th><th>1-day trace</th></tr></thead>
+      <tbody>${byDay.map((d) => `<tr><td>${formatDate(d.date)}</td><td>${distribution({ ...d, average: d.average }, lo - span * 0.15, hi + span * 0.15, s.color).replace(/mmol\/L/g, s.unit)}</td><td>${dayTrace(d.vals)}</td></tr>`).join("")}</tbody></table>
+    </section>`;
+  };
+  document.getElementById("generic-tables").innerHTML =
+    table("oxygenSaturation") + table("heartRateVariability") +
+    `<div class="unchanged">Same generic table for respiratory rate, BMI, body fat, waist circumference, lean body mass, VO₂ max and walking heart rate average</div>`;
+}
+
+document.querySelectorAll(".proto-bar [data-control]").forEach((group) =>
+  group.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    group.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    state[group.dataset.control] = b.dataset.value;
+    document.getElementById("main").classList.toggle("print-layout", state.layout === "print");
+    renderGlucoseTable();
+  }),
+);
+renderGlucoseTable();
+renderGeneric();
+</script>
+</body>
+</html>
