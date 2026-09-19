@@ -666,38 +666,63 @@ export function plateauSegments(
       86_400_000 +
     1;
   const bucketSize = Math.max(7, Math.round(spanDays / 13));
-  const buckets: { values: number[]; startIndex: number; endIndex: number }[] =
-    [];
-  for (let i = 0; i < rows.length; i += bucketSize) {
-    const end = Math.min(i + bucketSize, rows.length);
-    buckets.push({
-      values: values.slice(i, end),
-      startIndex: i,
-      endIndex: end - 1,
-    });
-  }
-  const segments: { values: number[]; startIndex: number; endIndex: number }[] =
-    [{ ...buckets[0] }];
-  for (let i = 1; i < buckets.length; i++) {
-    const bucket = buckets[i];
-    const current = segments.at(-1)!;
-    const currentMean = mean(current.values);
-    const bucketMean = mean(bucket.values);
-    const pooledSD = (stdDev(current.values) + stdDev(bucket.values)) / 2;
-    const threshold = 0.75 * Math.max(pooledSD, noiseFloor);
-    if (Math.abs(bucketMean - currentMean) <= threshold) {
-      current.values = current.values.concat(bucket.values);
-      current.endIndex = bucket.endIndex;
-    } else {
-      segments.push({ ...bucket });
+
+  // Never let a plateau segment bridge a stretch with no real data: reuse
+  // denseDaily's own interpolation boundaries (the same ones the charts
+  // draw as a dashed gap) to split the real readings into calendar-
+  // contiguous runs, breaking wherever an unreported gap is at least a
+  // bucket's worth of days long. Each run is bucketed/merged independently,
+  // so a segment's mean and merge decision never mixes readings from
+  // opposite sides of a stretch with no data.
+  type Row = { date: string; value: number; unit: string };
+  const runs: Row[][] = [[]];
+  let gapDays = 0;
+  for (const day of denseDaily(rows)) {
+    if (day.interpolated) {
+      gapDays++;
+      if (gapDays >= bucketSize && runs.at(-1)!.length) runs.push([]);
+      continue;
     }
+    gapDays = 0;
+    runs.at(-1)!.push({ date: day.date, value: day.value, unit: day.unit });
   }
+
   const unit = rows[0].unit;
-  const result: { date: string; value: number; unit: string }[] = [];
-  for (const segment of segments) {
-    const segmentMean = mean(segment.values);
-    for (let i = segment.startIndex; i <= segment.endIndex; i++) {
-      result.push({ date: rows[i].date, value: segmentMean, unit });
+  const result: Row[] = [];
+  for (const run of runs) {
+    if (run.length < 14) continue;
+    const runValues = run.map((r) => r.value);
+    const buckets: { values: number[]; startIndex: number; endIndex: number }[] =
+      [];
+    for (let i = 0; i < run.length; i += bucketSize) {
+      const end = Math.min(i + bucketSize, run.length);
+      buckets.push({
+        values: runValues.slice(i, end),
+        startIndex: i,
+        endIndex: end - 1,
+      });
+    }
+    const segments: { values: number[]; startIndex: number; endIndex: number }[] =
+      [{ ...buckets[0] }];
+    for (let i = 1; i < buckets.length; i++) {
+      const bucket = buckets[i];
+      const current = segments.at(-1)!;
+      const currentMean = mean(current.values);
+      const bucketMean = mean(bucket.values);
+      const pooledSD = (stdDev(current.values) + stdDev(bucket.values)) / 2;
+      const threshold = 0.75 * Math.max(pooledSD, noiseFloor);
+      if (Math.abs(bucketMean - currentMean) <= threshold) {
+        current.values = current.values.concat(bucket.values);
+        current.endIndex = bucket.endIndex;
+      } else {
+        segments.push({ ...bucket });
+      }
+    }
+    for (const segment of segments) {
+      const segmentMean = mean(segment.values);
+      for (let i = segment.startIndex; i <= segment.endIndex; i++) {
+        result.push({ date: run[i].date, value: segmentMean, unit });
+      }
     }
   }
   return result;

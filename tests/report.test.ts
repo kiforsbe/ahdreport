@@ -328,6 +328,33 @@ describe("plateauSegments bucket size scales with the report's date span", () =>
   });
 });
 
+describe("plateauSegments never bridges a stretch with no data", () => {
+  const dateAt = (dayIndex: number) =>
+    new Date(2026, 0, 1 + dayIndex).toISOString().slice(0, 10);
+  it("does not blend a bucket across a gap, and drops a too-short run on either side", () => {
+    // Regime A has only 3 real days — below the 14-day minimum on its own —
+    // separated from regime B by a ~43-day stretch with no data at all.
+    const regimeA = Array.from({ length: 3 }, (_, i) => ({
+      date: dateAt(i),
+      value: 40,
+      unit: "mmHg",
+    }));
+    const regimeB = Array.from({ length: 20 }, (_, i) => ({
+      date: dateAt(45 + i),
+      value: 100,
+      unit: "mmHg",
+    }));
+    const segments = plateauSegments([...regimeA, ...regimeB]);
+    // Position-based bucketing used to fold regime A's readings into
+    // regime B's first bucket, diluting its mean away from 100. Gap
+    // awareness means regime A (too sparse alone) contributes nothing, and
+    // regime B's plateau is a clean, undiluted 100.
+    expect(segments.every((s) => s.date >= dateAt(45))).toBe(true);
+    expect(segments).toHaveLength(20);
+    expect(segments.every((s) => s.value === 100)).toBe(true);
+  });
+});
+
 describe("blood pressure derived metrics", () => {
   const bpRows: HealthRecord[] = [
     {
