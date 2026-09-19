@@ -55,6 +55,8 @@ function formatPatientDate(value?: string) {
 export function App() {
   const [data, setData] = useState<HealthData | null>(null);
   const [printLayout, setPrintLayout] = useState(false);
+  const [detailedTablesInPdf, setDetailedTablesInPdf] = useState(true);
+  const [includeDetailedTables, setIncludeDetailedTables] = useState(true);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const patientProfile = useRef<PatientProfile>(emptyPatientProfile);
@@ -99,10 +101,18 @@ export function App() {
       healthAtlasPrintLayout?: (
         active: boolean,
         rasterizeCharts?: boolean,
+        includeDetailedTables?: boolean,
       ) => Promise<void>;
     };
-    printWindow.healthAtlasPrintLayout = async (active, rasterizeCharts = false) => {
-      flushSync(() => setPrintLayout(active));
+    printWindow.healthAtlasPrintLayout = async (
+      active,
+      rasterizeCharts = false,
+      includeDetailedTables = true,
+    ) => {
+      flushSync(() => {
+        setPrintLayout(active);
+        setDetailedTablesInPdf(includeDetailedTables);
+      });
       await document.fonts?.ready;
       await new Promise<void>((resolve) =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -215,6 +225,7 @@ export function App() {
       patient.dateOfBirth,
       patient.sex,
       rasterizeCharts,
+      includeDetailedTables,
     );
     if (!result.canceled)
       setNotice(`${rasterizeCharts ? "Compact " : ""}PDF saved to ${result.path}`);
@@ -277,6 +288,14 @@ export function App() {
                 <button role="menuitem" onClick={() => pdf(true)}>
                   Export compact PDF
                 </button>
+                <label className="export-menu-option">
+                  <input
+                    type="checkbox"
+                    checked={includeDetailedTables}
+                    onChange={(e) => setIncludeDetailedTables(e.target.checked)}
+                  />
+                  Include detailed tables
+                </label>
                 <button role="menuitem" onClick={() => dataExport("csv")}>
                   Export CSV
                 </button>
@@ -469,6 +488,7 @@ export function App() {
           <span key={warning}>{warning}</span>
         ))}
       </section>
+      {(!printLayout || detailedTablesInPdf) && (
       <section className="print-report">
         <h2>Detailed measurements</h2>
         <p>
@@ -562,6 +582,7 @@ export function App() {
           )}
         </LazyDisclosure>
       </section>
+      )}
       </main>
     </PrintLayoutContext.Provider>
   );

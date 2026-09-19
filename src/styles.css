@@ -159,6 +159,18 @@ header span {
 .export-menu button:hover {
   background: #eef2ff;
 }
+.export-menu-option {
+  align-items: center;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  padding: 6px 10px;
+}
+.export-menu-option:hover {
+  background: #eef2ff;
+}
 .controls {
   display: flex;
   gap: 22px;

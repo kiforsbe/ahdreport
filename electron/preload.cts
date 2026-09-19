@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("healthAPI", {
     dateOfBirth?: string,
     sex?: string,
     rasterizeCharts = false,
+    includeDetailedTables = true,
   ) =>
     ipcRenderer.invoke(
       "health:exportPdf",
@@ -16,6 +17,7 @@ contextBridge.exposeInMainWorld("healthAPI", {
       dateOfBirth,
       sex,
       rasterizeCharts,
+      includeDetailedTables,
     ),
   exportData: (format: "csv" | "xlsx", content: string) =>
     ipcRenderer.invoke("health:exportData", format, content),

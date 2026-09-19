@@ -102,6 +102,7 @@ ipcMain.handle(
     dateOfBirth?: string,
     sex?: string,
     rasterizeCharts = false,
+    includeDetailedTables = true,
   ) => {
     if (!mainWindow) return { canceled: true };
     const target = await dialog.showSaveDialog(mainWindow, {
@@ -133,7 +134,7 @@ ipcMain.handle(
     const footerTemplate = `<div style="${bandStyle}"><span></span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`;
     try {
       await mainWindow.webContents.executeJavaScript(
-        `(async () => { if (!window.healthAtlasPrintLayout) throw new Error("Print layout bridge is unavailable"); await window.healthAtlasPrintLayout(true, ${rasterizeCharts}); return true; })()`,
+        `(async () => { if (!window.healthAtlasPrintLayout) throw new Error("Print layout bridge is unavailable"); await window.healthAtlasPrintLayout(true, ${rasterizeCharts}, ${includeDetailedTables}); return true; })()`,
       );
       mainWindow.webContents.invalidate();
       await mainWindow.webContents.capturePage();

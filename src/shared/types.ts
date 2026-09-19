@@ -122,6 +122,7 @@ export interface HealthAPI {
     dateOfBirth?: string,
     sex?: string,
     rasterizeCharts?: boolean,
+    includeDetailedTables?: boolean,
   ): Promise<{ path?: string; canceled: boolean }>;
   exportData(
     format: "csv" | "xlsx",
