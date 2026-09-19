@@ -158,3 +158,82 @@ describe("physiological plausibility filtering", () => {
     expect(result.diagnostics.implausible).toBe(1);
   });
 });
+
+describe("glucose, insulin and additional categories", () => {
+  const rec = (type: string, unit: string, value: string, time: string, children = "") =>
+    `<Record type="${type}" sourceName="Src" unit="${unit}" value="${value}" startDate="2026-01-02 ${time}:00 +0000" endDate="2026-01-02 ${time}:00 +0000">${children}</Record>`;
+  const meta = (key: string, value: string) => `<MetadataEntry key="${key}" value="${value}"/>`;
+  const parse = (body: string) =>
+    parseAppleHealthExport(
+      Buffer.from(`<?xml version="1.0"?><HealthData>${body}</HealthData>`),
+      "export.xml",
+    );
+
+  it("converts glucose to mmol/L and maps meal-time metadata", async () => {
+    const result = await parse(
+      rec("HKQuantityTypeIdentifierBloodGlucose", "mg/dL", "126", "08:00", meta("HKBloodGlucoseMealTime", "2")) +
+        rec("HKQuantityTypeIdentifierBloodGlucose", "mmol&lt;180.15588000005408&gt;/L", "5.4", "09:00"),
+    );
+    const [first, second] = result.records;
+    expect(first.metric).toBe("bloodGlucose");
+    expect(first.unit).toBe("mmol/L");
+    expect(first.value).toBeCloseTo(126 / 18.0156, 6);
+    expect(first.category).toBe("afterMeal");
+    expect(second).toMatchObject({ metric: "bloodGlucose", unit: "mmol/L", value: 5.4 });
+    expect(second.category).toBeUndefined();
+  });
+
+  it("maps insulin delivery reason from single or multiple metadata entries", async () => {
+    const result = await parse(
+      rec(
+        "HKQuantityTypeIdentifierInsulinDelivery",
+        "IU",
+        "6",
+        "10:00",
+        meta("HKWasUserEntered", "1") + meta("HKInsulinDeliveryReason", "2"),
+      ) +
+        rec("HKQuantityTypeIdentifierInsulinDelivery", "IU", "14", "22:00", meta("HKInsulinDeliveryReason", "1")) +
+        rec("HKQuantityTypeIdentifierInsulinDelivery", "IU", "2", "23:00"),
+    );
+    expect(result.records.map((r) => [r.metric, r.value, r.category])).toEqual([
+      ["insulinDelivery", 6, "bolus"],
+      ["insulinDelivery", 14, "basal"],
+      ["insulinDelivery", 2, undefined],
+    ]);
+  });
+
+  it("converts fraction percentages and rejects implausible glucose after conversion", async () => {
+    const result = await parse(
+      rec("HKQuantityTypeIdentifierOxygenSaturation", "%", "0.97", "11:00") +
+        rec("HKQuantityTypeIdentifierBodyFatPercentage", "%", "0.253", "12:00") +
+        rec("HKQuantityTypeIdentifierBloodGlucose", "mg/dL", "900", "13:00"),
+    );
+    expect(result.records).toHaveLength(2);
+    expect(result.records[0]).toMatchObject({ metric: "oxygenSaturation", unit: "%" });
+    expect(result.records[0].value).toBeCloseTo(97, 6);
+    expect(result.records[1].value).toBeCloseTo(25.3, 6);
+    expect(result.diagnostics.implausible).toBe(1);
+  });
+
+  it("maps the remaining new quantity types", async () => {
+    const result = await parse(
+      rec("HKQuantityTypeIdentifierHeartRateVariabilitySDNN", "ms", "42", "01:00") +
+        rec("HKQuantityTypeIdentifierRespiratoryRate", "count/min", "14.5", "02:00") +
+        rec("HKQuantityTypeIdentifierVO2Max", "mL/min·kg", "33.1", "03:00") +
+        rec("HKQuantityTypeIdentifierWalkingHeartRateAverage", "count/min", "102", "04:00") +
+        rec("HKQuantityTypeIdentifierBodyMassIndex", "count", "29.4", "05:00") +
+        rec("HKQuantityTypeIdentifierWaistCircumference", "cm", "102", "06:00") +
+        rec("HKQuantityTypeIdentifierLeanBodyMass", "kg", "58", "07:00"),
+    );
+    expect(result.records.map((r) => r.metric)).toEqual([
+      "heartRateVariability",
+      "respiratoryRate",
+      "vo2Max",
+      "walkingHeartRateAverage",
+      "bodyMassIndex",
+      "waistCircumference",
+      "leanBodyMass",
+    ]);
+    expect(result.diagnostics.unsupported).toBe(0);
+  });
+});

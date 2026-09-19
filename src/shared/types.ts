@@ -23,6 +23,17 @@ export type Metric =
   | "fiber"
   | "protein"
   | "fat"
+  | "bloodGlucose"
+  | "insulinDelivery"
+  | "bodyMassIndex"
+  | "bodyFatPercentage"
+  | "waistCircumference"
+  | "leanBodyMass"
+  | "oxygenSaturation"
+  | "respiratoryRate"
+  | "heartRateVariability"
+  | "vo2Max"
+  | "walkingHeartRateAverage"
   | "medication";
 
 export type SymptomId =

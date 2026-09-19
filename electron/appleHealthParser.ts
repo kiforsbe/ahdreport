@@ -34,6 +34,17 @@ const typeMap: Record<string, Metric> = {
   HKQuantityTypeIdentifierDietaryFiber: "fiber",
   HKQuantityTypeIdentifierDietaryProtein: "protein",
   HKQuantityTypeIdentifierDietaryFatTotal: "fat",
+  HKQuantityTypeIdentifierBloodGlucose: "bloodGlucose",
+  HKQuantityTypeIdentifierInsulinDelivery: "insulinDelivery",
+  HKQuantityTypeIdentifierBodyMassIndex: "bodyMassIndex",
+  HKQuantityTypeIdentifierBodyFatPercentage: "bodyFatPercentage",
+  HKQuantityTypeIdentifierWaistCircumference: "waistCircumference",
+  HKQuantityTypeIdentifierLeanBodyMass: "leanBodyMass",
+  HKQuantityTypeIdentifierOxygenSaturation: "oxygenSaturation",
+  HKQuantityTypeIdentifierRespiratoryRate: "respiratoryRate",
+  HKQuantityTypeIdentifierHeartRateVariabilitySDNN: "heartRateVariability",
+  HKQuantityTypeIdentifierVO2Max: "vo2Max",
+  HKQuantityTypeIdentifierWalkingHeartRateAverage: "walkingHeartRateAverage",
   HKClinicalTypeIdentifierMedicationRecord: "medication",
 };
 const symptomTypeMap: Record<string, SymptomId> = {
@@ -89,12 +100,66 @@ const plausibleRanges: Partial<
   bloodPressureDiastolic: { mmHg: [30, 150] },
   bodyTemperature: { degC: [30, 45], degF: [86, 113] },
   weight: { kg: [20, 300], lb: [44, 660] },
+  bloodGlucose: { "mmol/L": [1, 40] },
+  insulinDelivery: { IU: [0, 300] },
+  oxygenSaturation: { "%": [50, 100] },
+  respiratoryRate: { "count/min": [4, 60] },
+  heartRateVariability: { ms: [1, 300] },
+  bodyMassIndex: { count: [10, 80] },
+  bodyFatPercentage: { "%": [2, 75] },
+  waistCircumference: { cm: [40, 200], in: [16, 80] },
+  leanBodyMass: { kg: [10, 200], lb: [22, 440] },
+  vo2Max: { "mL/min·kg": [5, 90] },
+  walkingHeartRateAverage: { "count/min": [30, 220] },
 };
 function isPlausible(metric: Metric, value: number, unit: string): boolean {
   if (value < 0) return false;
   if (metric === "sleep") return value <= 24;
   const bounds = plausibleRanges[metric]?.[unit];
   return !bounds || (value >= bounds[0] && value <= bounds[1]);
+}
+
+const MG_PER_MMOL_GLUCOSE = 18.0156;
+// Apple stores these as fractions (0.97) with unit "%".
+const fractionPercentMetrics: Metric[] = ["oxygenSaturation", "bodyFatPercentage"];
+function normalizeQuantity(
+  metric: Metric,
+  value: number,
+  unit: string,
+): { value: number; unit: string } {
+  if (metric === "bloodGlucose") {
+    if (unit === "mg/dL") return { value: value / MG_PER_MMOL_GLUCOSE, unit: "mmol/L" };
+    // The mmol unit embeds the molar mass, e.g. "mmol<180.15588000005408>/L".
+    if (/^mmol(<[\d.]+>)?\/L$/.test(unit)) return { value, unit: "mmol/L" };
+  }
+  if (fractionPercentMetrics.includes(metric) && unit === "%" && value <= 1)
+    return { value: value * 100, unit };
+  return { value, unit };
+}
+// Only these two metrics read MetadataEntry children; every other record
+// skips the work so large exports are not slowed down.
+const metadataCategories: Partial<
+  Record<Metric, { key: string; values: Record<string, string> }>
+> = {
+  bloodGlucose: {
+    key: "HKBloodGlucoseMealTime",
+    values: { "1": "beforeMeal", "2": "afterMeal" },
+  },
+  insulinDelivery: {
+    key: "HKInsulinDeliveryReason",
+    values: { "1": "basal", "2": "bolus" },
+  },
+};
+function metadataCategory(metric: Metric, raw: unknown): string | undefined {
+  const spec = metadataCategories[metric];
+  if (!spec) return undefined;
+  const entries = (raw && typeof raw === "object"
+    ? (raw as { MetadataEntry?: unknown }).MetadataEntry
+    : undefined);
+  const entry = nodes(entries)
+    .map(attribute)
+    .find((candidate) => candidate.key === spec.key);
+  return entry ? spec.values[String(entry.value)] : undefined;
 }
 
 function attribute(x: unknown): Record<string, string> {
@@ -252,12 +317,16 @@ export async function parseAppleHealthExport(
     }
     const start = r.startDate;
     const end = r.endDate || start;
-    const value = metric === "sleep" ? sleepHours(start, end) : Number(r.value);
+    const rawValue = metric === "sleep" ? sleepHours(start, end) : Number(r.value);
     const timestamp = Date.parse(start);
-    if (!start || !Number.isFinite(timestamp) || !Number.isFinite(value))
+    if (!start || !Number.isFinite(timestamp) || !Number.isFinite(rawValue))
       continue;
     const date = new Date(timestamp).toISOString();
-    const unit = metric === "sleep" ? "hr" : r.unit || "";
+    const { value, unit } = normalizeQuantity(
+      metric,
+      rawValue,
+      metric === "sleep" ? "hr" : r.unit || "",
+    );
     if (!isPlausible(metric, value, unit)) {
       implausible++;
       continue;
@@ -271,7 +340,7 @@ export async function parseAppleHealthExport(
       value,
       unit,
       source: r.sourceName,
-      category: metric === "sleep" ? r.value : undefined,
+      category: metric === "sleep" ? r.value : metadataCategory(metric, raw),
     });
   }
   records.sort((a, b) => a.date.localeCompare(b.date));
