@@ -667,68 +667,49 @@ export function plateauSegments(
     1;
   const bucketSize = Math.max(7, Math.round(spanDays / 13));
 
-  // Group real readings into calendar-contiguous runs, breaking wherever
-  // two consecutive real readings are more than a bucket's worth of days
-  // apart — that stretch has too little data to say anything about, and a
-  // plateau segment never bridges it. Within a run, small gaps are filled
-  // in via the same linear interpolation the charts draw (denseDaily), so
-  // a run's length — and the minimum-length check below — is judged by the
-  // calendar days it actually spans rather than by how many raw readings
-  // happen to fall inside it: sparse-but-regular readings over a long span
-  // should still read as a plateau, not get dropped for being undersampled.
-  type Row = { date: string; value: number; unit: string };
-  const realRuns: Row[][] = [[rows[0]]];
-  for (let i = 1; i < rows.length; i++) {
-    const gapDays =
-      (new Date(rows[i].date).getTime() - new Date(rows[i - 1].date).getTime()) /
-      86_400_000;
-    if (gapDays > bucketSize) realRuns.push([]);
-    realRuns.at(-1)!.push(rows[i]);
+  // Bucket the fully-dense calendar-day series — real readings plus the
+  // same linear interpolation the charts draw for missing days (denseDaily)
+  // — rather than just the sparse real rows. This makes bucket positions
+  // correspond directly to calendar days, so the plateau overlay stays
+  // continuous across the whole reported range (never leaving a hole where
+  // readings happen to be sparse) instead of either blending far-apart
+  // clusters together through purely positional bucketing, or refusing to
+  // bridge a gap at all.
+  const dense = denseDaily(rows);
+  if (dense.length < bucketSize) return [];
+  const denseValues = dense.map((r) => r.value);
+  const buckets: { values: number[]; startIndex: number; endIndex: number }[] =
+    [];
+  for (let i = 0; i < dense.length; i += bucketSize) {
+    const end = Math.min(i + bucketSize, dense.length);
+    buckets.push({
+      values: denseValues.slice(i, end),
+      startIndex: i,
+      endIndex: end - 1,
+    });
   }
-
+  const segments: { values: number[]; startIndex: number; endIndex: number }[] =
+    [{ ...buckets[0] }];
+  for (let i = 1; i < buckets.length; i++) {
+    const bucket = buckets[i];
+    const current = segments.at(-1)!;
+    const currentMean = mean(current.values);
+    const bucketMean = mean(bucket.values);
+    const pooledSD = (stdDev(current.values) + stdDev(bucket.values)) / 2;
+    const threshold = 0.75 * Math.max(pooledSD, noiseFloor);
+    if (Math.abs(bucketMean - currentMean) <= threshold) {
+      current.values = current.values.concat(bucket.values);
+      current.endIndex = bucket.endIndex;
+    } else {
+      segments.push({ ...bucket });
+    }
+  }
   const unit = rows[0].unit;
-  const result: Row[] = [];
-  for (const realRun of realRuns) {
-    const run = denseDaily(realRun);
-    // A run needs at least one full bucket's worth of calendar days to
-    // count as a plateau at all — bucketSize is already the minimum
-    // plateau length, so gating on a separate hardcoded minimum here would
-    // silently drop short-but-real clusters (e.g. a week of readings
-    // sandwiched between two data gaps) that are long enough to say
-    // something meaningful about.
-    if (run.length < bucketSize) continue;
-    const runValues = run.map((r) => r.value);
-    const buckets: { values: number[]; startIndex: number; endIndex: number }[] =
-      [];
-    for (let i = 0; i < run.length; i += bucketSize) {
-      const end = Math.min(i + bucketSize, run.length);
-      buckets.push({
-        values: runValues.slice(i, end),
-        startIndex: i,
-        endIndex: end - 1,
-      });
-    }
-    const segments: { values: number[]; startIndex: number; endIndex: number }[] =
-      [{ ...buckets[0] }];
-    for (let i = 1; i < buckets.length; i++) {
-      const bucket = buckets[i];
-      const current = segments.at(-1)!;
-      const currentMean = mean(current.values);
-      const bucketMean = mean(bucket.values);
-      const pooledSD = (stdDev(current.values) + stdDev(bucket.values)) / 2;
-      const threshold = 0.75 * Math.max(pooledSD, noiseFloor);
-      if (Math.abs(bucketMean - currentMean) <= threshold) {
-        current.values = current.values.concat(bucket.values);
-        current.endIndex = bucket.endIndex;
-      } else {
-        segments.push({ ...bucket });
-      }
-    }
-    for (const segment of segments) {
-      const segmentMean = mean(segment.values);
-      for (let i = segment.startIndex; i <= segment.endIndex; i++) {
-        result.push({ date: run[i].date, value: segmentMean, unit });
-      }
+  const result: { date: string; value: number; unit: string }[] = [];
+  for (const segment of segments) {
+    const segmentMean = mean(segment.values);
+    for (let i = segment.startIndex; i <= segment.endIndex; i++) {
+      result.push({ date: dense[i].date, value: segmentMean, unit });
     }
   }
   return result;

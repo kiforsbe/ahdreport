@@ -338,12 +338,18 @@ describe("plateauSegments bucket size scales with the report's date span", () =>
   });
 });
 
-describe("plateauSegments never bridges a stretch with no data", () => {
+describe("plateauSegments bridges gaps using interpolation, for continuous coverage", () => {
   const dateAt = (dayIndex: number) =>
     new Date(2026, 0, 1 + dayIndex).toISOString().slice(0, 10);
-  it("does not blend a bucket across a gap, and drops a too-short run on either side", () => {
-    // Regime A has only 3 real days — below the 14-day minimum on its own —
-    // separated from regime B by a ~43-day stretch with no data at all.
+  it("covers every calendar day across a large real-data gap when both sides read the same value", () => {
+    // A ~43-day stretch with no real readings at all between two short
+    // clusters. The overlay must not leave a hole there: it's filled the
+    // same way the chart's own line is (linear interpolation via
+    // denseDaily), so a steady value either side of the gap reads as one
+    // unbroken plateau across the whole range, matching how charts like
+    // Body mass index / Body fat / Lean body mass are sampled sporadically
+    // (e.g. an occasionally-used smart scale) but should still read as
+    // continuous plateaus, not gaps.
     const regimeA = Array.from({ length: 3 }, (_, i) => ({
       date: dateAt(i),
       value: 40,
@@ -351,17 +357,14 @@ describe("plateauSegments never bridges a stretch with no data", () => {
     }));
     const regimeB = Array.from({ length: 20 }, (_, i) => ({
       date: dateAt(45 + i),
-      value: 100,
+      value: 40,
       unit: "mmHg",
     }));
     const segments = plateauSegments([...regimeA, ...regimeB]);
-    // Position-based bucketing used to fold regime A's readings into
-    // regime B's first bucket, diluting its mean away from 100. Gap
-    // awareness means regime A (too sparse alone) contributes nothing, and
-    // regime B's plateau is a clean, undiluted 100.
-    expect(segments.every((s) => s.date >= dateAt(45))).toBe(true);
-    expect(segments).toHaveLength(20);
-    expect(segments.every((s) => s.value === 100)).toBe(true);
+    expect(segments).toHaveLength(65);
+    expect(segments[0].date).toBe(dateAt(0));
+    expect(segments.at(-1)!.date).toBe(dateAt(64));
+    expect(segments.every((s) => s.value === 40)).toBe(true);
   });
   it("still finds a plateau in sparse-but-regular readings spanning a long calendar range", () => {
     // Only 11 real readings (every 3rd day) over a 31-day span — too few
