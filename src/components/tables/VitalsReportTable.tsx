@@ -36,15 +36,11 @@ export const VitalsReportTable = memo(function VitalsReportTable({
   const heartRate = new Map(
     dailyStats(records, "heartRate").map((day) => [day.date, day]),
   );
-  const weight = new Map(
-    dailyStats(records, "weight").map((day) => [day.date, day]),
-  );
   const allDates = [
     ...new Set([
       ...systolic.keys(),
       ...diastolic.keys(),
       ...heartRate.keys(),
-      ...weight.keys(),
     ]),
   ].sort((a, b) => b.localeCompare(a));
   const dates = allDates.slice(
@@ -59,7 +55,6 @@ export const VitalsReportTable = memo(function VitalsReportTable({
   const heartRateBounds = columnBounds(
     dates.map((date) => heartRate.get(date)),
   );
-  const weightBounds = columnBounds(dates.map((date) => weight.get(date)));
   const unitOf = (map: Map<string, ReturnType<typeof dailyStats>[number]>) =>
     map.values().next().value?.unit ?? "";
   const cell = (
@@ -88,7 +83,6 @@ export const VitalsReportTable = memo(function VitalsReportTable({
       "bloodPressureDiastolic",
       "bloodPressureSystolic",
       "heartRate",
-      "weight",
     ] as Metric[]
   ).map((metric) => {
     const note = coverageNote(metric, metadata, from, to);
@@ -107,7 +101,6 @@ export const VitalsReportTable = memo(function VitalsReportTable({
             <th>Diastolic{unitLabel(unitOf(diastolic))}</th>
             <th>Systolic{unitLabel(unitOf(systolic))}</th>
             <th>Heart rate{unitLabel(unitOf(heartRate))}</th>
-            <th>Weight{unitLabel(unitOf(weight))}</th>
           </tr>
         </thead>
         <tbody>
@@ -129,7 +122,6 @@ export const VitalsReportTable = memo(function VitalsReportTable({
                 )}
               </td>
               <td>{cell(heartRate.get(date), "heartRate", heartRateBounds)}</td>
-              <td>{cell(weight.get(date), "weight", weightBounds)}</td>
             </tr>
           ))}
         </tbody>

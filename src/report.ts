@@ -774,6 +774,11 @@ export const bpMetrics: Metric[] = [
   "bloodPressureSystolic",
   "bloodPressureDiastolic",
 ];
+export const bodyCompositionMetrics: Metric[] = [
+  "bodyMassIndex",
+  "bodyFatPercentage",
+  "leanBodyMass",
+];
 export const walkingMetrics: Metric[] = [
   "walkingSpeed",
   "stepLength",

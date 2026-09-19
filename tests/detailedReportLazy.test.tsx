@@ -11,8 +11,8 @@ async function clickAndFlush(element: HTMLElement) {
 }
 
 const records: HealthRecord[] = [
-  { metric: "weight", date: "2026-01-01T09:00:00.000Z", value: 70, unit: "kg" },
-  { metric: "weight", date: "2026-01-02T09:00:00.000Z", value: 71, unit: "kg" },
+  { metric: "heartRate", date: "2026-01-01T09:00:00.000Z", value: 70, unit: "count/min" },
+  { metric: "heartRate", date: "2026-01-02T09:00:00.000Z", value: 71, unit: "count/min" },
 ];
 const metadata = rangeMetadata(records);
 

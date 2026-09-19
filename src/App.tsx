@@ -5,6 +5,7 @@ import {
   MAX_PDF_TABLE_ROWS,
   MAX_TABLE_ROWS,
   activityMetrics,
+  bodyCompositionMetrics,
   bpMetrics,
   filtered,
   filteredSymptoms,
@@ -31,6 +32,7 @@ import { coverageNote } from "./components/TableNotes";
 import { LazyDisclosure } from "./components/LazyDisclosure";
 import { ReportTable } from "./components/tables/ReportTable";
 import { VitalsReportTable } from "./components/tables/VitalsReportTable";
+import { BodyCompositionReportTable } from "./components/tables/BodyCompositionReportTable";
 import { WalkingReportTable } from "./components/tables/WalkingReportTable";
 import { ActivityReportTable } from "./components/tables/ActivityReportTable";
 import { NutritionReportTable } from "./components/tables/NutritionReportTable";
@@ -530,6 +532,7 @@ export function App() {
                 range={glucoseRange}
               />
               <VitalsReportTable records={records} from={from} to={to} metadata={metadata} />
+              <BodyCompositionReportTable records={records} from={from} to={to} metadata={metadata} />
               <ActivityReportTable records={records} from={from} to={to} metadata={metadata} />
               <WalkingReportTable records={records} from={from} to={to} metadata={metadata} />
               <NutritionReportTable records={records} from={from} to={to} metadata={metadata} />
@@ -540,6 +543,7 @@ export function App() {
                     !bpMetrics.includes(metric) &&
                     metric !== "heartRate" &&
                     metric !== "weight" &&
+                    !bodyCompositionMetrics.includes(metric) &&
                     !activityMetrics.includes(metric) &&
                     !walkingMetrics.includes(metric) &&
                     !nutritionMetrics.includes(metric),
