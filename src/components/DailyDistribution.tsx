@@ -24,6 +24,7 @@ export function DailyDistribution({
   gridColor = DEFAULT_GRID_COLOR,
   gridMinorDivisions = DEFAULT_GRID_MINOR_DIVISIONS,
   color = DEFAULT_SHADE_COLOR,
+  band,
 }: {
   min: number;
   max: number;
@@ -39,6 +40,7 @@ export function DailyDistribution({
   gridColor?: string;
   gridMinorDivisions?: number;
   color?: string;
+  band?: { low: number; high: number; color: string };
 }) {
   const span = columnMax - columnMin || 1;
   const scaleMin = columnMin - span * 0.15;
@@ -55,6 +57,15 @@ export function DailyDistribution({
   ).filter((v) => !majorTicks.some((m) => Math.abs(m - v) < step * 1e-6));
   const grid = (
     <>
+      {band && (
+        <rect
+          x={Math.max(8, x(band.low))}
+          y="3"
+          width={Math.max(0, Math.min(152, x(band.high)) - Math.max(8, x(band.low)))}
+          height="20"
+          fill={band.color}
+        />
+      )}
       {minorTicks
         .map(x)
         .filter(inRange)

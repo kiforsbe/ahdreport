@@ -1,0 +1,15 @@
+/* Blood glucose: detailed table */
+.glucose-th-sub { display: block; font-weight: 400; font-size: 10px; color: #8a94a6; margin-top: 2px; }
+.glucose-split-cell { min-width: 108px; }
+.glucose-split-bar { display: flex; gap: 2px; height: 8px; width: 104px; }
+.glucose-split-bar i { display: block; border-radius: 3px; min-width: 3px; }
+.glucose-split-cell small { display: block; margin-top: 4px; font-size: 11px; color: #536176; font-variant-numeric: tabular-nums; }
+.glucose-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.glucose-trace-axis { display: flex; justify-content: space-between; font-size: 9px; font-weight: 400; color: #8a94a6; margin-top: 3px; }
+.glucose-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 11px; color: #667085; margin-top: 9px; }
+.glucose-legend span::before {
+  content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+  background: var(--c); margin-right: 5px; vertical-align: -1px;
+}
+.glucose-legend span.hollow::before { background: none; border: 1px solid var(--c); }
+@media (max-width: 800px) { .glucose-report-section { overflow-x: auto; } }
