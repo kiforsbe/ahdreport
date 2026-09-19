@@ -105,5 +105,18 @@
 }
 /* Must follow the max-width rules: the A4 print viewport is narrower than 800px. */
 @media print {
-  .cards.cards-6 { grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .cards.cards-6 { grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .cards.cards-6 .card { padding: 8px 7px; }
+  .cards.cards-6 .card span { font-size: 10px; }
+  .cards.cards-6 .card strong {
+    font-size: 14px;
+    margin: 8px 0 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cards.cards-6 .card small {
+    font-size: 8px;
+    line-height: 1.3;
+  }
 }

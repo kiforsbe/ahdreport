@@ -747,6 +747,18 @@ td:nth-child(2) {
   .symptom-overview-grid {
     grid-template-columns: 1fr;
   }
+  /* Must follow the max-width rules above: the A4 print viewport is
+     narrower than 800px, so without this the cards stack to one column. */
+  .symptom-summary-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .symptom-summary-cards .card {
+    padding: 10px;
+  }
+  .symptom-summary-cards .card strong {
+    font-size: 18px;
+  }
   .print-report {
     margin-top: 22px;
   }
