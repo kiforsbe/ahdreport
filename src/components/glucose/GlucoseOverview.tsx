@@ -1,12 +1,11 @@
 import { memo, useMemo } from "react";
-import type React from "react";
 import type { HealthRecord } from "../../shared/types";
 import {
   type GlucoseRange,
   type GlucoseSummary,
   formatMmol,
   glucoseAssociations,
-  glucoseColors,
+  glucoseChartAxis,
   glucoseDaily,
   glucoseHourlyProfile,
   glucoseSummary,
@@ -16,6 +15,7 @@ import { GlucoseDailyPattern } from "./GlucoseDailyPattern";
 import { GlucoseRangeControl } from "./GlucoseRangeControl";
 import { GlucoseSummaryCard } from "./GlucoseSummaryCard";
 import { GlucoseTimeline } from "./GlucoseTimeline";
+import { GlucoseReferenceNote } from "./GlucoseReferenceLines";
 
 function MealContext({ context }: { context: GlucoseSummary["mealContext"] }) {
   const row = (label: string, stat: { count: number; median?: number }) => (
@@ -48,6 +48,8 @@ export const GlucoseOverview = memo(function GlucoseOverview({
   range,
   onRangeChange,
   hasGlucose,
+  trackingRecords = records,
+  contextRecords = records,
 }: {
   records: HealthRecord[];
   from: string;
@@ -55,9 +57,12 @@ export const GlucoseOverview = memo(function GlucoseOverview({
   range: GlucoseRange;
   onRangeChange: (range: GlucoseRange) => void;
   hasGlucose: boolean;
+  trackingRecords?: HealthRecord[];
+  contextRecords?: HealthRecord[];
 }) {
   const summary = useMemo(() => glucoseSummary(records, range, from, to), [records, range, from, to]);
   const days = useMemo(() => glucoseDaily(records, range), [records, range]);
+  const axis = useMemo(() => glucoseChartAxis(trackingRecords, contextRecords), [trackingRecords, contextRecords]);
   const associations = useMemo(() => glucoseAssociations(records), [records]);
   const dense = summary?.dense ?? false;
   const profile = useMemo(() => (dense ? glucoseHourlyProfile(records) : undefined), [records, dense]);
@@ -79,23 +84,11 @@ export const GlucoseOverview = memo(function GlucoseOverview({
         <div className="empty">No blood glucose readings were found for this period.</div>
       ) : (
         <>
-          <GlucoseSummaryCard summary={summary} days={days} range={range} from={from} to={to} />
+          <GlucoseSummaryCard summary={summary} days={days} range={range} from={from} to={to} trackingRecords={trackingRecords} contextRecords={contextRecords} axis={axis} />
+          <GlucoseReferenceNote range={range} />
           <div className="glucose-overview-grid">
             <article className="panel">
-              <div className="glucose-panel-heading">
-                <h3>Glucose and context</h3>
-                <small className="glucose-timeline-hint">
-                  {summary.dense ? "Continuous readings shown as hourly medians. " : ""}
-                  Hover to see what was logged around a reading.
-                </small>
-              </div>
-              <GlucoseTimeline records={records} range={range} from={from} to={to} continuous={summary.dense} />
-              <div className="glucose-legend glucose-dot-legend">
-                <span style={{ "--c": glucoseColors.below } as React.CSSProperties}>Below target</span>
-                <span style={{ "--c": glucoseColors.line } as React.CSSProperties}>Within target</span>
-                <span style={{ "--c": glucoseColors.above } as React.CSSProperties}>Above target</span>
-                <span style={{ "--c": glucoseColors.insulin } as React.CSSProperties}>Insulin: solid bolus, outlined basal</span>
-              </div>
+              <GlucoseTimeline records={trackingRecords} contextRecords={contextRecords} range={range} from={from} to={to} continuous={summary.dense} axis={axis} />
             </article>
             <GlucoseAssociationPanel associations={associations} />
           </div>

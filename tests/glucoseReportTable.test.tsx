@@ -74,4 +74,11 @@ describe("GlucoseReportTable", () => {
     renderTable(records);
     expect(screen.getByText("Showing the most recent 365 of 366 days with data.")).toBeInTheDocument();
   });
+
+  it("keeps an overnight pair in one morning-to-morning row", () => {
+    const { container } = renderTable([glucose(at(0, 23), 5), glucose(at(1, 1), 8)]);
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(screen.getByText(/06:00.*next morning/)).toBeInTheDocument();
+    expect(container.querySelector(".glucose-pair-trace")).not.toBeNull();
+  });
 });

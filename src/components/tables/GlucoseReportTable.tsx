@@ -19,6 +19,7 @@ import {
   glucoseRangeText,
   glucoseSummary,
   niceYMax,
+  DEFAULT_GLUCOSE_DAY_START,
 } from "../../glucose";
 import { PrintLayoutContext } from "../../PrintLayoutContext";
 import { DailyDistribution } from "../DailyDistribution";
@@ -48,7 +49,7 @@ export const GlucoseReportTable = memo(function GlucoseReportTable({
   range: GlucoseRange;
 }) {
   const printLayout = useContext(PrintLayoutContext);
-  const allDays = glucoseDaily(records, range);
+  const allDays = glucoseDaily(records, range, DEFAULT_GLUCOSE_DAY_START);
   const days = allDays.slice(0, printLayout ? MAX_PDF_TABLE_ROWS : MAX_TABLE_ROWS);
   if (!days.length) return null;
   const summary = glucoseSummary(records, range, from, to)!;
@@ -67,6 +68,7 @@ export const GlucoseReportTable = memo(function GlucoseReportTable({
       <TableNotes
         notes={[
           `Target range: ${glucosePresetLabel(range.preset)}, ${glucoseRangeText(range)}.`,
+          "Each row runs 06:00 to 06:00 next morning. Dashed trace links show inferred meal pairs 1–3 hours apart.",
           summary.dense
             ? `Continuous data: ${Math.round(summary.coverage * 100)}% coverage across ${summary.daysWithReadings} days. Range columns are shares of readings per day.`
             : "Range columns are shares of recorded readings, not time in range.",
@@ -88,7 +90,7 @@ export const GlucoseReportTable = memo(function GlucoseReportTable({
             <th>
               Across the day
               <div className="glucose-trace-axis" style={{ width: traceWidth }}>
-                <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+                <span>06</span><span>12</span><span>18</span><span>00</span><span>06+1</span>
               </div>
             </th>
             <th>

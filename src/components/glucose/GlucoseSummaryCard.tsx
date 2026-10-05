@@ -5,6 +5,7 @@ import {
   type GlucoseDay,
   type GlucoseRange,
   type GlucoseSummary,
+  type GlucoseAxis,
   formatMmol,
   glucoseColors,
   glucoseRangeText,
@@ -12,6 +13,8 @@ import {
   timeOfDay,
 } from "../../glucose";
 import { GlucoseDailyChart } from "./GlucoseDailyChart";
+import type { HealthRecord } from "../../shared/types";
+import { GlucoseImpactChart } from "./GlucoseImpactChart";
 
 const pct = (share: number) => `${Math.round(share * 100)}%`;
 const statusLabels: [GlucoseClass, string][] = [["below", "Below"], ["within", "Within"], ["above", "Above"]];
@@ -41,12 +44,18 @@ export function GlucoseSummaryCard({
   range,
   from,
   to,
+  trackingRecords,
+  contextRecords,
+  axis,
 }: {
   summary: GlucoseSummary;
   days: GlucoseDay[];
   range: GlucoseRange;
   from: string;
   to: string;
+  trackingRecords?: HealthRecord[];
+  contextRecords?: HealthRecord[];
+  axis?: GlucoseAxis;
 }) {
   return (
     <article className="card glucose-summary-card">
@@ -77,8 +86,9 @@ export function GlucoseSummaryCard({
         </dl>
       </div>
       <div>
-        <div className="glucose-chart-title"><b>Daily range and median</b><span>Target {glucoseRangeText(range)}</span></div>
-        <GlucoseDailyChart days={days} range={range} from={from} to={to} />
+        <div className="glucose-chart-title"><b>{trackingRecords ? "Fasting and meal response" : "Daily range and median"}</b><span>Target {glucoseRangeText(range)}</span></div>
+        {trackingRecords ? <GlucoseImpactChart records={trackingRecords} contextRecords={contextRecords} range={range} axis={axis} />
+          : <GlucoseDailyChart days={days} range={range} from={from} to={to} />}
         <GlucoseRangeSplit split={summary.split} />
         <small>{summary.dense ? "Share of time, weighted by continuous readings." : "Share of recorded readings, not time in range."}</small>
       </div>

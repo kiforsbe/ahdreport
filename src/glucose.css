@@ -15,6 +15,76 @@
 @media (max-width: 800px) { .glucose-report-section { overflow-x: auto; } }
 
 /* Blood glucose: overview tile */
+.glucose-impact-scroll { overflow-x: auto; padding-bottom: 5px; }
+.glucose-impact-scroll .glucose-impact-chart svg { height: auto; }
+.glucose-meal-candle, .glucose-daily-candle, .glucose-fasting-marker { cursor: help; }
+.glucose-meal-candle:focus-visible, .glucose-daily-candle:focus-visible, .glucose-fasting-marker:focus-visible { outline: 1px solid #4263eb; }
+.glucose-impact-tooltip { max-width: 320px; top: 10px; }
+.glucose-context-tooltip { max-width: 320px; top: 10px; }
+.glucose-impact-legend { display: flex; flex-wrap: wrap; gap: 8px 15px; margin: 8px 0; color: #536176; font-size: 11px; }
+.glucose-impact-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.glucose-impact-legend i { display: inline-block; width: 8px; height: 8px; background: #4263eb; }
+.glucose-impact-legend .diamond { transform: rotate(45deg); }
+.glucose-impact-legend .candle { width: 4px; height: 14px; border-radius: 2px; }
+.glucose-impact-legend .up { background: #d97736; }
+.glucose-impact-legend .down { background: #0a8d83; }
+.glucose-impact-legend .unpaired { border-radius: 50%; background: #94a3b8; }
+.glucose-impact-legend .range { width: 2px; height: 14px; }
+.glucose-impact-legend .box { width: 10px; height: 12px; border: 1px solid #4263eb; background: #e0e7ff; border-radius: 2px; }
+.glucose-impact-legend .median { width: 12px; height: 2px; }
+.glucose-impact-legend .average { border: 1.4px solid #536176; background: white; border-radius: 50%; }
+.glucose-reference-note { margin: 0 0 16px; font-size: 11px; color: #667085; line-height: 1.5; }
+.glucose-reference-legend { display: flex; flex-wrap: wrap; gap: 5px 18px; margin-bottom: 4px; }
+.glucose-reference-legend span::before { content: ""; display: inline-block; width: 16px; border-top: 1px dashed currentColor; margin-right: 5px; vertical-align: 3px; }
+.glucose-reference-note a { color: #4263eb; }
+.glucose-timeline-note { display: block; margin-top: 4px; line-height: 1.45; }
+.glucose-heatmap {
+  --heatmap-paper: #fff; --heatmap-ink: #182338;
+  --heatmap-muted: #60718a; --heatmap-rule: #e5eaf2; --heatmap-empty: #f5f7fa;
+  color: var(--heatmap-ink);
+}
+.glucose-heatmap-heading { display: flex; justify-content: space-between; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
+.glucose-heatmap-heading h3 { margin: 0; }
+.glucose-heatmap-selector { max-width: 100%; margin-left: auto; border: 1px solid var(--heatmap-rule); border-radius: 6px; background: var(--heatmap-paper); color: var(--heatmap-ink); padding: 6px; font: inherit; font-size: 11px; }
+.glucose-heatmap-body { position: relative; }
+.glucose-heatmap-canvas { position: relative; }
+.glucose-heatmap-legend { position: absolute; top: 0; z-index: 1; pointer-events: none; }
+.glucose-heatmap svg text { fill: var(--heatmap-muted); font-size: 11px; }
+.glucose-heatmap-canvas > svg rect { shape-rendering: crispEdges; }
+.glucose-heatmap-explorer { overflow-x: auto; min-width: 0; }
+.glucose-heatmap-explorer:focus-visible { outline: 2px solid #4263eb; outline-offset: 2px; }
+.glucose-heatmap-legend small { display: flex; align-items: center; justify-content: center; color: var(--heatmap-muted); font-size: 10px; }
+.glucose-heatmap-legend > div { display: grid; grid-template-rows: repeat(8, minmax(0, 1fr)); gap: 2px; }
+.glucose-heatmap-legend span { display: flex; align-items: center; justify-content: center; font-size: 10px; font-variant-numeric: tabular-nums; }
+.glucose-heatmap-contract, .glucose-heatmap-help { display: block; color: var(--heatmap-muted); font-size: 11px; line-height: 1.5; margin-top: 7px; }
+.glucose-heatmap-tooltip { position: absolute; z-index: 3; display: flex; flex-direction: column; gap: 4px; width: 300px; max-width: calc(100% - 16px); box-sizing: border-box; pointer-events: none; border: 1px solid var(--heatmap-rule); background: var(--heatmap-paper); color: var(--heatmap-ink); box-shadow: 0 5px 18px #18233826; border-radius: 7px; padding: 10px 12px; font-size: 12px; font-variant-numeric: tabular-nums; line-height: 1.45; }
+.print-layout .glucose-heatmap { break-inside: avoid; }
+.print-layout .glucose-heatmap-selector, .print-layout .glucose-heatmap-tooltip { display: none; }
+.print-layout .glucose-heatmap-explorer { overflow: visible; }
+.print-layout .glucose-heatmap-explorer:focus-visible { outline: none; }
+@media (max-width: 600px) { .glucose-heatmap-heading { flex-wrap: wrap; } }
+@media print {
+  .glucose-heatmap { print-color-adjust: exact; -webkit-print-color-adjust: exact; break-inside: avoid;
+    --heatmap-band-0: var(--heatmap-print-band-0) !important; --heatmap-text-0: var(--heatmap-print-text-0) !important;
+    --heatmap-band-1: var(--heatmap-print-band-1) !important; --heatmap-text-1: var(--heatmap-print-text-1) !important;
+    --heatmap-band-2: var(--heatmap-print-band-2) !important; --heatmap-text-2: var(--heatmap-print-text-2) !important;
+    --heatmap-band-3: var(--heatmap-print-band-3) !important; --heatmap-text-3: var(--heatmap-print-text-3) !important;
+    --heatmap-band-4: var(--heatmap-print-band-4) !important; --heatmap-text-4: var(--heatmap-print-text-4) !important;
+    --heatmap-band-5: var(--heatmap-print-band-5) !important; --heatmap-text-5: var(--heatmap-print-text-5) !important;
+    --heatmap-band-6: var(--heatmap-print-band-6) !important; --heatmap-text-6: var(--heatmap-print-text-6) !important;
+    --heatmap-band-7: var(--heatmap-print-band-7) !important; --heatmap-text-7: var(--heatmap-print-text-7) !important;
+  }
+  .glucose-heatmap-selector, .glucose-heatmap-tooltip, .glucose-hour-selection { display: none; }
+  .glucose-heatmap-explorer { overflow: visible; }
+  .glucose-heatmap-explorer:focus-visible { outline: none; }
+  .glucose-heatmap-canvas, .glucose-heatmap-canvas > svg { width: 100% !important; }
+  .glucose-heatmap-canvas > svg { height: auto !important; }
+  .glucose-heatmap > .glucose-heatmap-help { display: none; }
+}
+.print-layout .glucose-impact-scroll { overflow: visible; break-inside: avoid; margin-bottom: 10px; }
+.print-layout .glucose-impact-chart { min-width: 0 !important; }
+
+/* Blood glucose: overview tile */
 .cards.cards-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 
 /* Blood glucose: dashboard section */

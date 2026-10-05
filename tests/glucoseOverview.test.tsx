@@ -76,6 +76,8 @@ describe("GlucoseOverview", () => {
     expect(screen.queryByText(/GMI/)).not.toBeInTheDocument();
     expect(share(container, "within")).toBe("67%");
     expect(screen.getByText(/Descriptive comparison only/)).toBeInTheDocument();
+    expect(screen.queryByText(/Days across, hours upward/)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Glucose and context" }).parentElement).toContainElement(screen.getByLabelText("Heatmap colour scheme"));
   });
 
   it("adds continuous metrics and the typical day for dense data", () => {
@@ -189,27 +191,32 @@ describe("glucose charts", () => {
     expect(screen.getByRole("status")).toHaveTextContent(`Median ${m(7)} mmol/L`);
   });
 
-  it("plots spot readings as points and continuous data as a line with lanes", () => {
+  it("plots hourly cells for both spot and continuous data with daily context lanes", () => {
     const { container, unmount } = render(
       <GlucoseTimeline records={spot} range={defaultGlucoseRange} from="" to="" continuous={false} />,
     );
-    expect(container.querySelectorAll("circle.glucose-timeline-point")).toHaveLength(3);
+    expect(container.querySelectorAll(".glucose-hour-cell")).toHaveLength(3);
     ["Carbohydrates", "Insulin", "Activity", "Sleep"].forEach((lane) => expect(screen.getByText(lane)).toBeInTheDocument());
     unmount();
     const { container: dense14 } = render(
       <GlucoseTimeline records={dense()} range={defaultGlucoseRange} from="" to="" continuous />,
     );
-    expect(dense14.querySelector("path.glucose-timeline-line")).not.toBeNull();
+    expect(dense14.querySelector("path.glucose-timeline-line")).toBeNull();
+    expect(dense14.querySelectorAll(".glucose-hour-cell")).toHaveLength(14 * 24);
+    expect([...dense14.querySelectorAll(".glucose-hour-cell")].every(c => c.getAttribute("data-mean") === "6.5")).toBe(true);
     expect(dense14.querySelectorAll("circle.glucose-timeline-point")).toHaveLength(0);
   });
 
-  it("aggregates to one point per day for periods over 45 days", () => {
+  it("keeps only the measured hour occupied on sparse days", () => {
     const records = Array.from({ length: 60 }, (_, d) => glucose(at(d, 8), 12));
     const { container } = render(
       <GlucoseTimeline records={records} range={defaultGlucoseRange} from={localDay(at(0, 0))} to={localDay(at(59, 0))} continuous={false} />,
     );
-    expect(screen.getByText(/one point per day/)).toBeInTheDocument();
-    expect(container.querySelectorAll("circle.glucose-timeline-point")).toHaveLength(60);
+    expect(screen.getByRole("img", { name: /Hourly glucose heatmap/ })).toHaveAttribute("data-days", "60");
+    const cells = [...container.querySelectorAll(".glucose-hour-cell")];
+    expect(cells).toHaveLength(60);
+    expect(cells.every(c => c.getAttribute("data-hour") === "8" && c.getAttribute("data-mean") === "12")).toBe(true);
+    expect(container.querySelectorAll(".glucose-hour-cell .glucose-hour-above")).toHaveLength(60);
   });
 });
 

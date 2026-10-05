@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { type GlucoseRange, type HourProfile, formatMmol, glucoseColors, niceYMax } from "../../glucose";
+import { GlucoseReferenceLines } from "./GlucoseReferenceLines";
 
 const W = 760, H = 220, L = 34, R = 10, T = 10, B = 24;
 type Band = "p5" | "p25" | "p50" | "p75" | "p95";
@@ -38,6 +39,7 @@ export const GlucoseDailyPattern = memo(function GlucoseDailyPattern({
           </g>
         ))}
         <rect x={L} y={y(range.high)} width={W - L - R} height={y(range.low) - y(range.high)} fill={glucoseColors.band} />
+        <GlucoseReferenceLines range={range} left={L} right={W - R} y={y} />
         {runs.filter((run) => run.length > 1).map((run, i) => (
           <g key={i}>
             <path d={area(run, "p5", "p95")} fill={glucoseColors.line} fillOpacity=".1" />

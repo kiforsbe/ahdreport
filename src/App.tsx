@@ -40,7 +40,7 @@ import { SymptomOverview } from "./components/SymptomOverview";
 import { SymptomsReportTable } from "./components/tables/SymptomsReportTable";
 import { GlucoseOverview } from "./components/glucose/GlucoseOverview";
 import { GlucoseReportTable } from "./components/tables/GlucoseReportTable";
-import { type GlucoseRange, defaultGlucoseRange } from "./glucose";
+import { type GlucoseRange, defaultGlucoseRange, glucoseTrackingRecords } from "./glucose";
 
 function rangeDate(days: number, end: string) {
   const d = end ? new Date(`${end}T12:00:00`) : new Date();
@@ -73,6 +73,7 @@ export function App() {
     [data, from, to],
   );
   const metadata = useMemo(() => rangeMetadata(records), [records]);
+  const trackingRecords = useMemo(() => data ? glucoseTrackingRecords(data.records, from, to) : [], [data, from, to]);
   const symptoms = useMemo(
     () => (data ? filteredSymptoms(data.symptoms, from, to) : []),
     [data, from, to],
@@ -398,6 +399,8 @@ export function App() {
       />
       <GlucoseOverview
         records={records}
+        trackingRecords={trackingRecords}
+        contextRecords={data.records}
         from={from}
         to={to}
         range={glucoseRange}
@@ -549,7 +552,7 @@ export function App() {
                 printLayout={printLayout}
               />
               <GlucoseReportTable
-                records={records}
+                records={trackingRecords}
                 from={from}
                 to={to}
                 metadata={metadata}

@@ -12,7 +12,7 @@ export const glucosePresets: { id: GlucosePresetId; label: string; low: number; 
   { id: "type2", label: "Type 2 diabetes", low: 3.9, high: 10.0 },
   { id: "type1", label: "Type 1 diabetes", low: 3.9, high: 10.0 },
   { id: "pregnancy", label: "Pregnancy / gestational", low: 3.5, high: 7.8 },
-  { id: "reference", label: "Non-diabetic reference", low: 3.9, high: 7.8 },
+  { id: "reference", label: "Non-diabetic male / female", low: 3.9, high: 7.8 },
   // Pre-filled with the common Swedish clinical shorthand.
   { id: "custom", label: "Custom", low: 4.0, high: 10.0 },
 ];
@@ -138,6 +138,47 @@ export function glucoseMorningReading(records: HealthRecord[], day: string, _sta
   if (!first || new Date(first.date).getHours() >= 10 || first.category === "afterMeal") return undefined;
   return { reading: first, confirmedFasting: first.category === "fasting", assumedFasting: first.category !== "fasting" };
 }
+export interface GlucoseAxis {
+  min: number;
+  max: number;
+  ticks: number[];
+}
+// Shared overview scale: normally 3–12, expanding only for displayed samples.
+// Include calendar-first fasting markers which can precede the 06:00 window,
+// but never let readings from unrelated dates stretch the selected period.
+export function glucoseChartAxis(records: HealthRecord[], contextRecords = records, startHour = DEFAULT_GLUCOSE_DAY_START): GlucoseAxis {
+  let lowest = 3, highest = 12;
+  const include = (value: number) => {
+    if (!Number.isFinite(value)) return;
+    lowest = Math.min(lowest, value);
+    highest = Math.max(highest, value);
+  };
+  const days = new Set<string>();
+  for (const reading of glucoseReadings(records)) {
+    include(reading.value);
+    days.add(glucoseTrackingDay(reading.date, startHour));
+  }
+  const mornings = new Map<string, HealthRecord>();
+  for (const reading of glucoseReadings(contextRecords)) {
+    const day = localDay(reading.date);
+    if (!days.has(day)) continue;
+    const first = mornings.get(day);
+    if (!first || Date.parse(reading.date) < Date.parse(first.date)) mornings.set(day, reading);
+  }
+  for (const [day, reading] of mornings) {
+    const fasting = glucoseMorningReading([reading], day);
+    if (fasting) include(fasting.reading.value);
+  }
+  const min = lowest < 3 ? Math.max(0, Math.floor(lowest - .25)) : 3;
+  const max = highest > 12 ? Math.ceil(highest + .25) : 12;
+  const step = max - min <= 12 ? 1 : max - min <= 24 ? 2 : 5;
+  const ticks = [min];
+  for (let tick = Math.ceil(min / step) * step; tick < max; tick += step) {
+    if (tick > min) ticks.push(tick);
+  }
+  ticks.push(max);
+  return { min, max, ticks };
+}
 export interface GlucoseMealPair {
   before: HealthRecord;
   after: HealthRecord;
@@ -157,21 +198,17 @@ export function glucoseMealPairs(records: HealthRecord[]): GlucoseMealPair[] {
     const tagged = (before.category === "beforeMeal" || before.category === "fasting") && after.category === "afterMeal";
     const logged = carbs.some(t => t >= start && t <= start + 30 * MINUTE_MS && t < end);
     pairs.push({ before, after, minutes, delta: after.value - before.value, evidence: tagged ? "tags" : logged ? "carbs" : "timing" });
-    i++; // A follow-up is not reused as another meal's baseline.
   }
   return pairs;
 }
-export type GlucoseReferenceMode = "fasting" | "twoHour";
-export function glucoseReferenceGuides(range: GlucoseRange, mode: GlucoseReferenceMode = "fasting") {
+export function glucoseReferenceGuides(range: GlucoseRange) {
   if (range.preset !== "reference") return [];
   // ADA 2026 laboratory screening thresholds: these are reference lines,
   // not diagnostic classifications of home measurements or ordinary meals.
-  return mode === "fasting" ? [
+  return [
     { value: 5.6, label: "Fasting: increased-risk threshold", color: "#b7791f" },
     { value: 7.0, label: "Fasting: diagnostic-test threshold", color: "#c92a2a" },
-  ] : [
-    { value: 7.8, label: "2-hour OGTT: increased-risk threshold", color: "#b7791f" },
-    { value: 11.1, label: "2-hour OGTT: diagnostic-test threshold", color: "#c92a2a" },
+    { value: 11.1, label: "2-hour diagnostic-test threshold", color: "#a61e4d" },
   ];
 }
 
