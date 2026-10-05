@@ -1,0 +1,101 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import {
+  defaultGlucoseRange, glucoseDaily, glucoseMealPairs, glucoseMorningReading,
+  glucoseTrackingDay, glucoseTrackingWindow, glucoseReferenceGuides, presetRange,
+} from "../src/glucose";
+import { GlucoseOverview } from "../src/components/glucose/GlucoseOverview";
+import type { HealthRecord } from "../src/shared/types";
+
+const at = (day: number, hour: number, minute = 0) => new Date(2026, 0, day, hour, minute).toISOString();
+const g = (day: number, hour: number, value: number, category?: string): HealthRecord =>
+  ({ metric: "bloodGlucose", date: at(day, hour), value, category, unit: "mmol/L" });
+const carb = (day: number, hour: number): HealthRecord =>
+  ({ metric: "carbs", date: at(day, hour, 10), value: 40, unit: "g" });
+
+describe("morning-to-morning glucose tracking", () => {
+  it("assigns pre-boundary readings to the preceding local day", () => {
+    expect(glucoseTrackingDay(at(2, 5, 59), 6)).toBe("2026-01-01");
+    expect(glucoseTrackingDay(at(2, 6), 6)).toBe("2026-01-02");
+    const { start, end } = glucoseTrackingWindow("2026-01-01", 6);
+    expect(start).toBe(Date.parse(at(1, 6)));
+    expect(end).toBe(Date.parse(at(2, 6)));
+  });
+
+  it("groups readings and context across midnight and counts the boundary once", () => {
+    const days = glucoseDaily([g(1, 23, 6), carb(2, 0), g(2, 1, 8), g(2, 6, 5)], defaultGlucoseRange, 6);
+    expect(days.map(d => [d.date, d.count])).toEqual([["2026-01-02", 1], ["2026-01-01", 2]]);
+    expect(days[1].carbs).toHaveLength(1);
+  });
+
+  it("uses the next local morning across daylight-saving changes", () => {
+    const { start, end } = glucoseTrackingWindow("2026-03-28", 6);
+    expect(new Date(start).getHours()).toBe(6);
+    expect(new Date(end).getHours()).toBe(6);
+    expect(new Date(end).getDate()).toBe(29);
+  });
+});
+
+describe("meal-response evidence", () => {
+  it("pairs readings 1–3 hours apart across midnight with elapsed time and delta", () => {
+    const pairs = glucoseMealPairs([g(1, 23, 5, "beforeMeal"), g(2, 1, 8, "afterMeal")]);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toMatchObject({ minutes: 120, delta: 3, evidence: "tags" });
+  });
+
+  it("keeps timing-only pairs distinct from logged meals and rejects outside the window", () => {
+    expect(glucoseMealPairs([g(1, 8, 5), g(1, 10, 7)])[0].evidence).toBe("timing");
+    expect(glucoseMealPairs([g(1, 8, 5), carb(1, 8), g(1, 10, 7)])[0].evidence).toBe("carbs");
+    expect(glucoseMealPairs([g(1, 8, 5), g(1, 12, 7)])).toHaveLength(0);
+    expect(glucoseMealPairs([g(1, 8, 5), g(1, 8, 7)])).toHaveLength(0);
+    expect(glucoseMealPairs([g(1, 8, 5, "afterMeal"), g(1, 10, 7, "beforeMeal")])).toHaveLength(0);
+  });
+
+  it("does not reuse a follow-up as another baseline", () => {
+    expect(glucoseMealPairs([g(1, 8, 5), g(1, 10, 7), g(1, 12, 8)])).toHaveLength(1);
+  });
+
+  it("marks the first reading before 10:00 as assumed fasting, but never confirms it", () => {
+    expect(glucoseMorningReading([g(1, 7, 5)], "2026-01-01", 6)?.confirmedFasting).toBe(false);
+    expect(glucoseMorningReading([g(1, 7, 5)], "2026-01-01", 6)?.assumedFasting).toBe(true);
+    expect(glucoseMorningReading([g(1, 7, 5, "fasting")], "2026-01-01", 6)?.confirmedFasting).toBe(true);
+    expect(glucoseMorningReading([g(1, 7, 8, "afterMeal")], "2026-01-01", 6)).toBeUndefined();
+    expect(glucoseMorningReading([g(1, 10, 5)], "2026-01-01", 6)).toBeUndefined();
+    expect(glucoseMorningReading([g(1, 5, 5), g(1, 7, 6)], "2026-01-01", 6)?.reading.value).toBe(5);
+  });
+});
+
+describe("non-diabetic reference guides", () => {
+  it("shows contextual risk indicators only for the non-diabetic target", () => {
+    const reference = presetRange("reference");
+    expect(glucoseReferenceGuides(reference).map(g => g.value)).toEqual([5.6, 7, 11.1]);
+    expect(glucoseReferenceGuides(defaultGlucoseRange)).toEqual([]);
+  });
+});
+
+describe("glucose impact overview", () => {
+  const records = [g(1, 7, 5), g(1, 8, 5, "beforeMeal"), carb(1, 8), g(1, 10, 8, "afterMeal"), g(2, 1, 7), g(2, 7, 6)];
+  it("shows fasting markers and meal candles for the whole period without a day selector", () => {
+    const { container } = render(<GlucoseOverview records={records} from="2026-01-01" to="2026-01-02"
+      range={presetRange("reference")} onRangeChange={() => {}} hasGlucose />);
+    const chart = screen.getByRole("img", { name: /Fasting readings and meal-response candles/ });
+    expect(chart.querySelectorAll(".glucose-fasting-marker")).toHaveLength(2);
+    expect(chart.querySelectorAll(".glucose-meal-candle")).toHaveLength(1);
+    expect(screen.queryByLabelText("Tracking day")).not.toBeInTheDocument();
+    fireEvent.focus(chart.querySelector(".glucose-meal-candle")!);
+    expect(screen.getByRole("status")).toHaveTextContent(/120 min/);
+    expect(screen.queryByLabelText("Reference lines")).not.toBeInTheDocument();
+    expect(chart.querySelectorAll("line.glucose-reference-line")).toHaveLength(3);
+    expect(screen.getByText(/2-hour diagnostic-test threshold 11[.,]1/)).toBeInTheDocument();
+    expect(container.querySelectorAll(".glucose-reference-line").length).toBeGreaterThan(2);
+  });
+
+  it("shows only days with data and identifies missing meal follow-ups", () => {
+    render(<GlucoseOverview records={[g(1, 8, 5), g(3, 8, 6)]} from="2026-01-01" to="2026-01-03"
+      range={defaultGlucoseRange} onRangeChange={() => {}} hasGlucose />);
+    const chart = screen.getByRole("img", { name: /Fasting readings and meal-response candles/ });
+    expect(chart.querySelectorAll(".glucose-fasting-marker")).toHaveLength(2);
+    expect(chart.querySelectorAll(".glucose-meal-candle")).toHaveLength(0);
+    expect(screen.getByText(/No consecutive readings 1–3 hours apart/)).toBeInTheDocument();
+  });
+});

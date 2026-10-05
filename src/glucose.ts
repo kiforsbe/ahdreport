@@ -106,6 +106,75 @@ export function glucoseReadings(records: HealthRecord[]) {
   return records.filter((record) => record.metric === "bloodGlucose");
 }
 
+// ---------- morning-to-morning tracking and inferred measurement context ----------
+export const DEFAULT_GLUCOSE_DAY_START = 6;
+export function glucoseTrackingWindow(day: string, startHour = DEFAULT_GLUCOSE_DAY_START) {
+  const start = new Date(`${day}T00:00:00`);
+  start.setHours(startHour);
+  const end = new Date(start);
+  // Advance the local date, not 24 elapsed hours (DST days have 23/25 hours).
+  end.setDate(end.getDate() + 1);
+  return { start: start.getTime(), end: end.getTime() };
+}
+export function glucoseTrackingDay(time: string | number, startHour = DEFAULT_GLUCOSE_DAY_START) {
+  const date = new Date(time);
+  if (date.getHours() < startHour) date.setDate(date.getDate() - 1);
+  return localDay(date.getTime());
+}
+export function glucoseTrackingRecords(records: HealthRecord[], from: string, to: string, startHour = DEFAULT_GLUCOSE_DAY_START) {
+  const start = from ? glucoseTrackingWindow(from, startHour).start : -Infinity;
+  const end = to ? glucoseTrackingWindow(to, startHour).end : Infinity;
+  return records.filter(r => {
+    const t = Date.parse(r.date);
+    // Keep duration records which overlap the window, even if they started earlier.
+    const duration = r.metric === "sleep" ? r.value * HOUR_MS : r.metric === "exerciseTime" ? r.value * MINUTE_MS : 0;
+    return t < end && (duration ? t + duration > start : t >= start);
+  });
+}
+export function glucoseMorningReading(records: HealthRecord[], day: string, _startHour = DEFAULT_GLUCOSE_DAY_START) {
+  // Fasting inference is deliberately calendar-based, independent of the chart boundary.
+  const first = glucoseReadings(records).filter(r => localDay(r.date) === day)
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))[0];
+  if (!first || new Date(first.date).getHours() >= 10 || first.category === "afterMeal") return undefined;
+  return { reading: first, confirmedFasting: first.category === "fasting", assumedFasting: first.category !== "fasting" };
+}
+export interface GlucoseMealPair {
+  before: HealthRecord;
+  after: HealthRecord;
+  minutes: number;
+  delta: number;
+  evidence: "tags" | "carbs" | "timing";
+}
+export function glucoseMealPairs(records: HealthRecord[]): GlucoseMealPair[] {
+  const readings = glucoseReadings(records).slice().sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const carbs = records.filter(r => r.metric === "carbs" && r.value > 0).map(r => Date.parse(r.date));
+  const pairs: GlucoseMealPair[] = [];
+  for (let i = 0; i < readings.length - 1; i++) {
+    const before = readings[i], after = readings[i + 1];
+    const start = Date.parse(before.date), end = Date.parse(after.date);
+    const minutes = (end - start) / MINUTE_MS;
+    if (minutes < 60 || minutes > 180 || before.category === "afterMeal" || after.category === "beforeMeal" || after.category === "fasting") continue;
+    const tagged = (before.category === "beforeMeal" || before.category === "fasting") && after.category === "afterMeal";
+    const logged = carbs.some(t => t >= start && t <= start + 30 * MINUTE_MS && t < end);
+    pairs.push({ before, after, minutes, delta: after.value - before.value, evidence: tagged ? "tags" : logged ? "carbs" : "timing" });
+    i++; // A follow-up is not reused as another meal's baseline.
+  }
+  return pairs;
+}
+export type GlucoseReferenceMode = "fasting" | "twoHour";
+export function glucoseReferenceGuides(range: GlucoseRange, mode: GlucoseReferenceMode = "fasting") {
+  if (range.preset !== "reference") return [];
+  // ADA 2026 laboratory screening thresholds: these are reference lines,
+  // not diagnostic classifications of home measurements or ordinary meals.
+  return mode === "fasting" ? [
+    { value: 5.6, label: "Fasting: increased-risk threshold", color: "#b7791f" },
+    { value: 7.0, label: "Fasting: diagnostic-test threshold", color: "#c92a2a" },
+  ] : [
+    { value: 7.8, label: "2-hour OGTT: increased-risk threshold", color: "#b7791f" },
+    { value: 11.1, label: "2-hour OGTT: diagnostic-test threshold", color: "#c92a2a" },
+  ];
+}
+
 // ---------- summary ----------
 export interface MealContextStat {
   count: number;
@@ -244,7 +313,7 @@ export interface GlucoseDay {
   bolus: number;
   unspecifiedInsulin: number;
 }
-export function glucoseDaily(records: HealthRecord[], range: GlucoseRange): GlucoseDay[] {
+export function glucoseDaily(records: HealthRecord[], range: GlucoseRange, startHour = 0): GlucoseDay[] {
   type Bucket = Pick<GlucoseDay, "readings" | "carbs" | "insulin" | "activity">;
   const buckets = new Map<string, Bucket>();
   const bucket = (day: string) => {
@@ -256,11 +325,11 @@ export function glucoseDaily(records: HealthRecord[], range: GlucoseRange): Gluc
     return found;
   };
   for (const record of records) {
-    if (record.metric === "bloodGlucose") bucket(localDay(record.date)).readings.push(record);
-    else if (record.metric === "carbs") bucket(localDay(record.date)).carbs.push(record);
-    else if (record.metric === "insulinDelivery") bucket(localDay(record.date)).insulin.push(record);
+    if (record.metric === "bloodGlucose") bucket(glucoseTrackingDay(record.date, startHour)).readings.push(record);
+    else if (record.metric === "carbs") bucket(glucoseTrackingDay(record.date, startHour)).carbs.push(record);
+    else if (record.metric === "insulinDelivery") bucket(glucoseTrackingDay(record.date, startHour)).insulin.push(record);
   }
-  for (const session of activitySessions(records)) bucket(localDay(session.start)).activity.push(session);
+  for (const session of activitySessions(records)) bucket(glucoseTrackingDay(session.start, startHour)).activity.push(session);
   const sum = (rows: HealthRecord[]) => rows.reduce((total, row) => total + row.value, 0);
   return [...buckets]
     .filter(([, b]) => b.readings.length)
