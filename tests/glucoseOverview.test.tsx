@@ -131,6 +131,23 @@ describe("GlucoseOverview", () => {
       screen.getByText(`Target range: Type 2 diabetes, ${glucoseRangeText(defaultGlucoseRange)}`),
     ).toBeInTheDocument();
   });
+
+  it.each([false, true])("keeps meal-response guidance on screen only (PDF layout: %s)", (printLayout) => {
+    renderOverview(spot, { printLayout });
+    for (const text of [
+      "Assumed fasting",
+      "Rise after inferred meal",
+      "Fall after inferred meal",
+      "Unpaired reading",
+      /^Each day runs/,
+      /^First reading before 10:00/,
+    ]) {
+      if (printLayout) expect(screen.queryByText(text)).not.toBeInTheDocument();
+      else expect(screen.getByText(text)).toBeInTheDocument();
+    }
+    expect(screen.getByRole("img", { name: /Fasting readings and meal-response candles/ })).toBeInTheDocument();
+    expect(screen.getByText("Share of recorded readings, not time in range.")).toBeInTheDocument();
+  });
 });
 
 describe("glucose charts", () => {

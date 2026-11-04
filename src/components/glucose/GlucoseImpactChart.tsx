@@ -31,8 +31,10 @@ export const GlucoseImpactChart = memo(function GlucoseImpactChart({ records, co
   const [hover, setHover] = useState<{ x: number; lines: string[] }>();
   const bounds = useMemo(() => axis ?? glucoseChartAxis(records, contextRecords, startHour), [axis, records, contextRecords, startHour]);
   if (!model.length) return null;
-  // Horizontal scroll preserves small candles for long histories; every day stays accessible.
-  const width = Math.max(760, model.length * 60 + L + R);
+  // Fit the PDF column without shrinking the chart height and text with long histories.
+  // The interactive chart keeps its wider, horizontally scrollable daily clusters.
+  const width = printLayout ? 470 : Math.max(760, model.length * 60 + L + R);
+  const dateStride = printLayout ? Math.max(1, Math.ceil(model.length / 8)) : 1;
   const slot = (width - L - R) / model.length;
   const y = (value: number) => T + (bounds.max - value) / (bounds.max - bounds.min) * (H - T - B);
   const bandLow = Math.max(bounds.min, range.low), bandHigh = Math.min(bounds.max, range.high);
@@ -98,11 +100,12 @@ export const GlucoseImpactChart = memo(function GlucoseImpactChart({ records, co
                   <path d={`M${cx},${cy - 5}l5,5l-5,5l-5,-5Z`} fill={color} stroke="white" strokeWidth="1.2" />
                 </g>;
               })}
-              {[0, 6, 12, 18, 24].map(offset => <g key={offset}>
+              {!printLayout && [0, 6, 12, 18, 24].map(offset => <g key={offset}>
                 <line x1={clockX(i, offset)} x2={clockX(i, offset)} y1={H - B + 8} y2={H - B + 12} stroke="#cfd6e3" />
                 <text x={clockX(i, offset)} y={H - B + 24} fontSize="8" textAnchor="middle" fill="#8a94a6">{String((startHour + offset) % 24).padStart(2, "0")}</text>
               </g>)}
-              <text x={L + (i + .5) * slot} y={H - 9} fontSize="10" textAnchor="middle" fill="#536176">{shortDate(day.date)}</text>
+              {(i === model.length - 1 || (i % dateStride === 0 && (i === 0 || model.length - 1 - i >= dateStride))) &&
+                <text x={L + (i + .5) * slot} y={H - 9} fontSize="10" textAnchor={printLayout && i === 0 ? "start" : printLayout && i === model.length - 1 ? "end" : "middle"} fill="#536176">{shortDate(day.date)}</text>}
             </g>;
           })}
         </svg>
@@ -112,6 +115,7 @@ export const GlucoseImpactChart = memo(function GlucoseImpactChart({ records, co
         </div>}
       </div>
     </div>
+    {!printLayout && <>
     <div className="glucose-impact-legend">
       <span><i className="diamond" />Assumed fasting</span>
       <span><i className="candle up" />Rise after inferred meal</span>
@@ -120,6 +124,7 @@ export const GlucoseImpactChart = memo(function GlucoseImpactChart({ records, co
     </div>
     <small className="glucose-timeline-note">Each day runs {startLabel} → {startLabel} next morning. Candle position and the bracket below show the measurement interval. Days without readings are omitted; scroll to see the whole period.</small>
     <small className="glucose-timeline-note">First reading before 10:00 is assumed fasting. Hollow → solid candle ends show consecutive readings 1–3 hours apart; dashed candles infer a meal from timing.</small>
+    </>}
     {!allPairs.length && <small className="glucose-timeline-note">No consecutive readings 1–3 hours apart; no meal-response candles can be shown.</small>}
   </>;
 });

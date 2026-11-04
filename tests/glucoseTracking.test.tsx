@@ -9,6 +9,7 @@ import { GlucoseOverview } from "../src/components/glucose/GlucoseOverview";
 import type { HealthRecord } from "../src/shared/types";
 import { GlucoseImpactChart } from "../src/components/glucose/GlucoseImpactChart";
 import { GlucoseTimeline } from "../src/components/glucose/GlucoseTimeline";
+import { PrintLayoutContext } from "../src/PrintLayoutContext";
 
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 0, day, hour, minute).toISOString();
 const g = (day: number, hour: number, value: number, category?: string): HealthRecord =>
@@ -125,6 +126,21 @@ describe("glucose impact overview", () => {
     expect(screen.getByRole("img").getAttribute("viewBox")).toBe("0 0 1244 300");
     expect(container.querySelectorAll(".glucose-meal-candle")).toHaveLength(40);
     expect(container.querySelectorAll(".glucose-daily-candle")).toHaveLength(0);
+  });
+
+  it.each([37, 180])("keeps the exported meal chart tall with %s days of readings", (days) => {
+    const records = Array.from({ length: days }, (_, i) => [g(i + 1, 8, 5), g(i + 1, 10, 7)]).flat();
+    render(<PrintLayoutContext.Provider value={true}>
+      <GlucoseImpactChart records={records} range={defaultGlucoseRange} />
+    </PrintLayoutContext.Provider>);
+    const chart = screen.getByRole("img");
+    const [, , width, height] = chart.getAttribute("viewBox")!.split(" ").map(Number);
+    // In the 470px PDF column, the plot must stay at least 250px tall.
+    expect(470 * height / width).toBeGreaterThanOrEqual(250);
+    expect(chart.querySelectorAll(".glucose-meal-candle")).toHaveLength(days);
+    const dates = [...chart.querySelectorAll("text")].filter(text => text.getAttribute("y") === "291");
+    expect(dates.length).toBeGreaterThanOrEqual(2);
+    expect(dates.length).toBeLessThanOrEqual(9);
   });
 
   it("keeps the calendar-first fasting indicator even when that sample precedes 06:00", () => {
