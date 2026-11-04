@@ -79,6 +79,10 @@ npm run dev
 The Vite renderer starts on the local loopback interface and Electron opens the desktop
 window. Nothing needs to be uploaded to use the application.
 
+In VS Code, open the repository folder and press **F5** (or **Ctrl+F5** to run
+without debugging). Select **Run AHDReport** if prompted. The launch configuration
+starts both Vite and Electron; stop it with **Ctrl+C** in its terminal.
+
 An `.env` file is optional. If you want fictional or local patient defaults, copy the
 example before starting the app:
 
